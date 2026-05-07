@@ -17,14 +17,14 @@ type TopMenuProps = {
 const slideLabels = [
   "Capa",
   "Contexto",
-  "Problema",
-  "Solução",
-  "Abril",
   "Combustível",
+  "Solução",
   "Manutenção",
-  "Serviços",
-  "Simulador",
-  "Conclusão",
+  "Custos Gerenciais",
+  "Diagnóstico crítico dos dados",
+  "Plano de evolução",
+  "Proposta de implantação",
+  "Encerramento",
 ];
 function handleDownloadExcels() {
   const files = [
