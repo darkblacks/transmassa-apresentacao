@@ -1,0 +1,30 @@
+.app-shell {
+  position: relative;
+  width: 100vw;
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: visible;
+}
+
+.presentation-stage {
+  position: relative;
+  z-index: 1;
+
+  width: 100%;
+  min-height: 100vh;
+
+  padding: 106px 34px 48px;
+
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.slide-frame {
+  width: 100%;
+  min-height: calc(100vh - 154px);
+
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
