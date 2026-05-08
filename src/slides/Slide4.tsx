@@ -121,12 +121,6 @@ function formatNumber(value: number) {
   });
 }
 
-function formatDecimal(value: number) {
-  return value.toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 function fleetLabel(fleet: FleetType) {
   return fleet === "Cavalo" ? "Cavalos" : "Carretas";
