@@ -653,11 +653,11 @@ export default function Slide4() {
       </div>
 
       <footer className="slide4-warning">
-        <strong>Ponto de Melhoria:</strong>
+        <strong>Leitura recomendada:</strong>
         <span>
-          O Ideal é que possamos averiguar além dos custos totais, verificar o
-          tempo ocioso de OS, a  quantidade de KM/TOTAL DE Manutenção
-          podemos conseguir estes indicadores nas proximas analises através de um trabalho mais completo.
+          A análise agora evita misturar cavalo com carreta. O ranking mensal ajuda a
+          identificar placas com concentração de custo em um mês específico, enquanto
+          a evolução mensal mostra se o gasto está recorrente ou pontual.
         </span>
       </footer>
 

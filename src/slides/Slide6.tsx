@@ -171,11 +171,18 @@ function normalizeMotivo(value: unknown) {
 function defaultPriceForService(service: string) {
   const text = normalizeText(service);
 
-  if (text.includes("transfer")) return 450;
-  if (text.includes("distribuicao")) return 120;
-  if (text.includes("coleta")) return 120;
-  if (text.includes("entrega")) return 120;
-  if (text.includes("devol")) return 80;
+  if (text.includes("transferencia rj")) return 5600;
+  if (text.includes("transferencia rp")) return 4250;
+  if (text.includes("transferencia sp")) return 3000;
+  if (text.includes("transferencia basel")) return 0;
+  if (text.includes("transferencia")) return 5600;
+
+  if (text.includes("distribu")) return 1000;
+  if (text.includes("coleta")) return 800;
+  if (text.includes("entrega")) return 1000;
+  if (text.includes("devol")) return 800;
+  if (text.includes("inventario")) return 0;
+  if (text.includes("sem manifesto")) return 0;
   if (text.includes("nao identificado")) return 0;
 
   return 0;
@@ -1325,7 +1332,7 @@ if (maintenanceSheetName) {
             >
               <option value="faturamentoTeorico">Faturamento teórico</option>
               <option value="faturamentoTransmassa">
-                Faturamento Transmassa
+                Faturamento Transmassa 2026
               </option>
               <option value="manifestos">Manifestos</option>
               <option value="servicos">Serviços</option>
