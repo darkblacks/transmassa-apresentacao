@@ -570,33 +570,6 @@ if (!monthOrder.includes(mes)) {
     ).sort();
   }, [trailerRows]);
 
-  const topTrailerPlates = useMemo(() => {
-    const map = new Map<
-      string,
-      { placa: string; reais: number; litros: number; horas: number }
-    >();
-
-    filteredTrailerRows.forEach((row) => {
-      const current =
-        map.get(row.placa) ?? {
-          placa: row.placa,
-          reais: 0,
-          litros: 0,
-          horas: 0,
-        };
-
-      current.reais += row.reais;
-      current.litros += row.litros;
-      current.horas += row.horas;
-
-      map.set(row.placa, current);
-    });
-
-    return Array.from(map.values())
-      .sort((a, b) => b.reais - a.reais)
-      .slice(0, 10);
-  }, [filteredTrailerRows]);
-
   const efficiencyChart = {
     grid: { left: 58, right: 22, top: 28, bottom: 34 },
     tooltip: {
