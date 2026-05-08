@@ -729,39 +729,6 @@ if (!monthOrder.includes(mes)) {
     ],
   };
 
-  const trailerTopPlatesChart = {
-    grid: { left: 78, right: 26, top: 24, bottom: 34 },
-    tooltip: {
-      trigger: "axis",
-      valueFormatter: (value: number) => formatCurrency(value),
-    },
-    xAxis: {
-      type: "category",
-      data: topTrailerPlates.map((item) => item.placa),
-      axisTick: { show: false },
-      axisLabel: { rotate: 35 },
-    },
-    yAxis: {
-      type: "value",
-      axisLabel: {
-        formatter: (value: number) => `R$ ${(value / 1000).toFixed(0)}k`,
-      },
-      splitLine: { lineStyle: { color: "#e5e7eb" } },
-    },
-    series: [
-      {
-        name: "Valor total",
-        type: "bar",
-        data: topTrailerPlates.map((item) => item.reais),
-        barWidth: 28,
-        itemStyle: {
-          borderRadius: [10, 10, 0, 0],
-          color: "#7f1d1d",
-        },
-      },
-    ],
-  };
-
   return (
     <section className="slide slide3">
       <header className="slide3-header">
