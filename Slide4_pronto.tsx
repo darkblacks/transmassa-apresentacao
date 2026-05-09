@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import ReactECharts from "echarts-for-react";
 
-type FilterType = "total" | "proprio" | "terceiro";
+type FleetFilter = "total" | "motorizado" | "carreta";
 type SortType = "desc" | "asc";
 type FleetType = "Motorizado" | "Carreta";
 type MonthFilter = "todos" | "Janeiro" | "Fevereiro" | "Março" | "Abril";
@@ -112,17 +112,6 @@ function getFleetType(value: unknown): FleetType | "" {
   return "";
 }
 
-function isProprio(value: string, dono?: string) {
-  const text = `${normalizeText(value)} ${normalizeText(dono)}`;
-
-  return (
-    text.includes("proprio") ||
-    text.includes("próprio") ||
-    text.includes("transmassa") ||
-    text.includes("alx")
-  );
-}
-
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", {
     style: "currency",
@@ -132,9 +121,10 @@ function formatCurrency(value: number) {
   });
 }
 
-function formatInteger(value: number) {
+function formatNumber(value: number) {
   return value.toLocaleString("pt-BR", {
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 }
 
@@ -143,6 +133,10 @@ function formatCompactCurrency(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}k`;
+}
+
+function fleetLabel(fleet: FleetType) {
+  return fleet === "Motorizado" ? "Motorizados" : "Carretas";
 }
 
 function getMonthly(rows: MaintenanceRow[], fleet?: FleetType): MonthlyItem[] {
@@ -190,7 +184,9 @@ function getRanking(
 
   return Object.values(grouped)
     .filter((item) => item.total > 0)
-    .sort((a, b) => (sortType === "desc" ? b.total - a.total : a.total - b.total))
+    .sort((a, b) =>
+      sortType === "desc" ? b.total - a.total : a.total - b.total
+    )
     .slice(0, 12);
 }
 
@@ -206,7 +202,7 @@ function makeMonthlyChart(data: MonthlyItem[], title: string, color = "#b01625")
         return [
           `<strong>${title} · ${item.name}</strong>`,
           `Total: ${formatCurrency(item.data)}`,
-          `OS: ${formatInteger(month?.os ?? 0)}`,
+          `OS: ${formatNumber(month?.os ?? 0)}`,
         ].join("<br />");
       },
     },
@@ -253,7 +249,7 @@ function makeRankingChart(data: RankingItem[], title: string, color = "#b01625")
           row?.tipoFrota ? `Tipo: ${row.tipoFrota}` : "",
           `Dono: ${row?.dono ?? "Não informado"}`,
           `Total: ${formatCurrency(item.data)}`,
-          `OS: ${formatInteger(row?.os ?? 0)}`,
+          `OS: ${formatNumber(row?.os ?? 0)}`,
         ]
           .filter(Boolean)
           .join("<br />");
@@ -287,7 +283,7 @@ function makeRankingChart(data: RankingItem[], title: string, color = "#b01625")
 
 export default function Slide4() {
   const [rows, setRows] = useState<MaintenanceRow[]>([]);
-  const [filter, setFilter] = useState<FilterType>("total");
+  const [fleetFilter, setFleetFilter] = useState<FleetFilter>("total");
   const [selectedOwner, setSelectedOwner] = useState("total");
   const [selectedPlate, setSelectedPlate] = useState("total");
   const [selectedRankingMonth, setSelectedRankingMonth] =
@@ -319,11 +315,7 @@ export default function Slide4() {
       const parsedRows = rawRows
         .map((row) => {
           const placa = normalizePlate(getValue(row, ["placa", "veiculo", "veículo"]));
-
-          const mes = getMonthName(
-            getValue(row, ["mês", "mes", "competência", "competencia"])
-          );
-
+          const mes = getMonthName(getValue(row, ["mês", "mes", "competência", "competencia"]));
           const tipoFrota = getFleetType(
             getValue(row, ["tipo frota", "cavalo_carreta", "cavalo carreta"])
           );
@@ -369,7 +361,14 @@ export default function Slide4() {
     const map = new Map<string, PlateOption>();
 
     rows.forEach((row) => {
-      if (!map.has(row.placa)) {
+      const matchFleet =
+        fleetFilter === "total"
+          ? true
+          : fleetFilter === "motorizado"
+            ? row.tipoFrota === "Motorizado"
+            : row.tipoFrota === "Carreta";
+
+      if (matchFleet && !map.has(row.placa)) {
         map.set(row.placa, {
           placa: row.placa,
           dono: row.dono || "Não informado",
@@ -382,15 +381,20 @@ export default function Slide4() {
     return Array.from(map.values()).sort((a, b) =>
       a.placa.localeCompare(b.placa)
     );
-  }, [rows]);
+  }, [rows, fleetFilter]);
 
   const ownerOptions = useMemo(() => {
     const owners = rows
+      .filter((row) => {
+        if (fleetFilter === "total") return true;
+        if (fleetFilter === "motorizado") return row.tipoFrota === "Motorizado";
+        return row.tipoFrota === "Carreta";
+      })
       .map((row) => row.dono || "Não informado")
       .filter(Boolean);
 
     return Array.from(new Set(owners)).sort();
-  }, [rows]);
+  }, [rows, fleetFilter]);
 
   const modalPlateOptions = useMemo(() => {
     return plateOptions.filter((item) => {
@@ -422,13 +426,14 @@ export default function Slide4() {
     setDraftSelectedOwner("total");
     setDraftSelectedPlate("total");
     setDraftPlateSearch("");
+
     setSelectedOwner("total");
     setSelectedPlate("total");
     setIsPlateModalOpen(false);
   }
 
   function clearAllFilters() {
-    setFilter("total");
+    setFleetFilter("total");
     setSelectedOwner("total");
     setSelectedPlate("total");
     setSelectedRankingMonth("todos");
@@ -437,14 +442,12 @@ export default function Slide4() {
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      const rowIsProprio = isProprio(row.propriedade, row.dono);
-
-      const matchOwnership =
-        filter === "total"
+      const matchFleet =
+        fleetFilter === "total"
           ? true
-          : filter === "proprio"
-            ? rowIsProprio
-            : !rowIsProprio;
+          : fleetFilter === "motorizado"
+            ? row.tipoFrota === "Motorizado"
+            : row.tipoFrota === "Carreta";
 
       const matchOwner =
         selectedOwner === "total" ? true : row.dono === selectedOwner;
@@ -452,41 +455,44 @@ export default function Slide4() {
       const matchPlate =
         selectedPlate === "total" ? true : row.placa === selectedPlate;
 
-      return matchOwnership && matchOwner && matchPlate;
+      return matchFleet && matchOwner && matchPlate;
     });
-  }, [rows, filter, selectedOwner, selectedPlate]);
+  }, [rows, fleetFilter, selectedOwner, selectedPlate]);
 
-  const sectionTotals = useMemo(() => {
-    const totalRows = filteredRows;
-    const motorizadoRows = filteredRows.filter((row) => row.tipoFrota === "Motorizado");
-    const carretaRows = filteredRows.filter((row) => row.tipoFrota === "Carreta");
+  const totals = useMemo(() => {
+    const total = filteredRows.reduce((sum, row) => sum + row.total, 0);
 
-    function calc(list: MaintenanceRow[]) {
-      const total = list.reduce((sum, row) => sum + row.total, 0);
+    const totalMotorizado = filteredRows
+      .filter((row) => row.tipoFrota === "Motorizado")
+      .reduce((sum, row) => sum + row.total, 0);
 
-      return {
-        total,
-        os: list.length,
-        placas: new Set(list.map((row) => row.placa)).size,
-        dias: list.reduce((sum, row) => sum + row.dias, 0),
-        custoMedioOs: list.length > 0 ? total / list.length : 0,
-      };
-    }
+    const totalCarreta = filteredRows
+      .filter((row) => row.tipoFrota === "Carreta")
+      .reduce((sum, row) => sum + row.total, 0);
+
+    const totalDias = filteredRows.reduce((sum, row) => sum + row.dias, 0);
+
+    const linhasRevisar = filteredRows.filter(
+      (row) => normalizeText(row.qualidade) !== "confiavel"
+    ).length;
 
     return {
-      geral: calc(totalRows),
-      motorizado: calc(motorizadoRows),
-      carreta: calc(carretaRows),
+      total,
+      totalMotorizado,
+      totalCarreta,
+      totalDias,
+      os: filteredRows.length,
+      placas: new Set(filteredRows.map((row) => row.placa)).size,
+      linhasRevisar,
+      custoMedioOs: filteredRows.length > 0 ? total / filteredRows.length : 0,
     };
   }, [filteredRows]);
 
   const totalMonthly = useMemo(() => getMonthly(filteredRows), [filteredRows]);
-
   const motorizadoMonthly = useMemo(
     () => getMonthly(filteredRows, "Motorizado"),
     [filteredRows]
   );
-
   const carretaMonthly = useMemo(
     () => getMonthly(filteredRows, "Carreta"),
     [filteredRows]
@@ -496,12 +502,10 @@ export default function Slide4() {
     () => getRanking(filteredRows, selectedRankingMonth, sortType),
     [filteredRows, selectedRankingMonth, sortType]
   );
-
   const motorizadoRanking = useMemo(
     () => getRanking(filteredRows, selectedRankingMonth, sortType, "Motorizado"),
     [filteredRows, selectedRankingMonth, sortType]
   );
-
   const carretaRanking = useMemo(
     () => getRanking(filteredRows, selectedRankingMonth, sortType, "Carreta"),
     [filteredRows, selectedRankingMonth, sortType]
@@ -511,31 +515,30 @@ export default function Slide4() {
     () => makeMonthlyChart(totalMonthly, "Total", "#b01625"),
     [totalMonthly]
   );
-
   const totalRankingChart = useMemo(
     () => makeRankingChart(totalRanking, "Total", "#7f1d1d"),
     [totalRanking]
   );
-
   const motorizadoMonthlyChart = useMemo(
     () => makeMonthlyChart(motorizadoMonthly, "Motorizados", "#991b1b"),
     [motorizadoMonthly]
   );
-
   const motorizadoRankingChart = useMemo(
     () => makeRankingChart(motorizadoRanking, "Motorizados", "#b01625"),
     [motorizadoRanking]
   );
-
   const carretaMonthlyChart = useMemo(
     () => makeMonthlyChart(carretaMonthly, "Carretas", "#243746"),
     [carretaMonthly]
   );
-
   const carretaRankingChart = useMemo(
     () => makeRankingChart(carretaRanking, "Carretas", "#229E93"),
     [carretaRanking]
   );
+
+  const showTotalSection = fleetFilter === "total";
+  const showMotorizadoSection = fleetFilter === "total" || fleetFilter === "motorizado";
+  const showCarretaSection = fleetFilter === "total" || fleetFilter === "carreta";
 
   return (
     <section className="slide slide4">
@@ -546,8 +549,8 @@ export default function Slide4() {
           <h1 className="slide4-title">Manutenção por tipo de frota</h1>
 
           <p className="slide4-subtitle">
-            Separação entre motorizados e carretas, com visão de totais,
-            evolução mensal e ranking por placa.
+            Separação entre motorizados e carretas, com leitura mensal, ranking por placa
+            e filtros por dono, placa e mês do ranking.
           </p>
         </div>
 
@@ -558,7 +561,6 @@ export default function Slide4() {
             onClick={openPlateModal}
           >
             <span>Placa / Dono selecionado</span>
-
             <strong>
               {selectedOwner === "total" ? "Todas as frotas" : selectedOwner}
               {selectedPlate !== "total" ? ` · ${selectedPlate}` : ""}
@@ -568,35 +570,56 @@ export default function Slide4() {
           <div className="slide3-filter slide4-filter">
             <button
               type="button"
-              className={filter === "total" ? "active" : ""}
-              onClick={() => setFilter("total")}
+              className={fleetFilter === "total" ? "active" : ""}
+              onClick={() => setFleetFilter("total")}
             >
               Total
             </button>
 
             <button
               type="button"
-              className={filter === "proprio" ? "active" : ""}
-              onClick={() => setFilter("proprio")}
+              className={fleetFilter === "motorizado" ? "active" : ""}
+              onClick={() => setFleetFilter("motorizado")}
             >
-              Próprio
+              Motorizado
             </button>
 
             <button
               type="button"
-              className={filter === "terceiro" ? "active" : ""}
-              onClick={() => setFilter("terceiro")}
+              className={fleetFilter === "carreta" ? "active" : ""}
+              onClick={() => setFleetFilter("carreta")}
             >
-              Terceiro
+              Carreta
             </button>
           </div>
         </div>
       </header>
 
+      <div className="slide3-kpis slide4-kpis">
+        <div className="slide3-kpi slide4-kpi-card">
+          <span>Total manutenção</span>
+          <strong>{formatCurrency(totals.total)}</strong>
+        </div>
+
+        <div className="slide3-kpi slide4-kpi-card">
+          <span>Total motorizados</span>
+          <strong>{formatCurrency(totals.totalMotorizado)}</strong>
+        </div>
+
+        <div className="slide3-kpi slide4-kpi-card">
+          <span>Total carretas</span>
+          <strong>{formatCurrency(totals.totalCarreta)}</strong>
+        </div>
+
+        <div className="slide3-kpi slide4-kpi-card highlight">
+          <span>Custo médio por OS</span>
+          <strong>{formatCurrency(totals.custoMedioOs)}</strong>
+        </div>
+      </div>
+
       <div className="slide4-secondary-controls">
         <label>
           Mês do ranking
-
           <select
             value={selectedRankingMonth}
             onChange={(event) =>
@@ -604,7 +627,6 @@ export default function Slide4() {
             }
           >
             <option value="todos">Todos os meses</option>
-
             {monthOrder.map((month) => (
               <option key={month} value={month}>
                 {month}
@@ -624,219 +646,126 @@ export default function Slide4() {
         <button type="button" className="slide4-toggle" onClick={clearAllFilters}>
           Limpar filtros
         </button>
+
+        <div className="slide4-quality-pill">
+          <span>OS: {formatNumber(totals.os)}</span>
+          <span>Placas: {formatNumber(totals.placas)}</span>
+          <span>Revisar: {formatNumber(totals.linhasRevisar)}</span>
+        </div>
       </div>
 
-      <section className="slide4-section-block">
-        <div className="slide4-section-header">
-          <span className="slide4-tag">Totais</span>
-
-          <h2 className="slide4-section-title">Total geral de manutenção</h2>
-
-          <p className="slide4-section-subtitle">
-            Soma dos custos de manutenção dos motorizados e das carretas.
-          </p>
-        </div>
-
-        <div className="slide3-kpis slide4-kpis">
-          <div className="slide3-kpi slide4-kpi-card">
-            <span>Total manutenção</span>
-            <strong>{formatCurrency(sectionTotals.geral.total)}</strong>
+      {showTotalSection && (
+        <section className="slide4-section-block">
+          <div className="slide4-section-header">
+            <span className="slide4-tag">Totais</span>
+            <h2 className="slide4-section-title">Visão geral da manutenção</h2>
           </div>
 
-          <div className="slide3-kpi slide4-kpi-card">
-            <span>Total OS</span>
-            <strong>{formatInteger(sectionTotals.geral.os)}</strong>
-          </div>
-
-          <div className="slide3-kpi slide4-kpi-card">
-            <span>Placas analisadas</span>
-            <strong>{formatInteger(sectionTotals.geral.placas)}</strong>
-          </div>
-
-          <div className="slide3-kpi slide4-kpi-card highlight">
-            <span>Custo médio por OS</span>
-            <strong>{formatCurrency(sectionTotals.geral.custoMedioOs)}</strong>
-          </div>
-        </div>
-
-        <div className="slide4-dashboard">
-          <div className="slide4-chart-card">
-            <div className="slide4-chart-header">
-              <div>
-                <strong>Total · evolução mensal</strong>
-                <span>Custo total de manutenção por mês</span>
+          <div className="slide4-dashboard">
+            <div className="slide4-chart-card">
+              <div className="slide4-chart-header">
+                <div>
+                  <strong>Total · evolução mensal</strong>
+                  <span>Custo total de manutenção por mês</span>
+                </div>
               </div>
+
+              <ReactECharts option={totalMonthlyChart} style={{ height: 280, width: "100%" }} />
             </div>
 
-            <ReactECharts
-              option={totalMonthlyChart}
-              style={{ height: 280, width: "100%" }}
-            />
+            <div className="slide4-chart-card">
+              <div className="slide4-chart-header">
+                <div>
+                  <strong>Total · maior manutenção</strong>
+                  <span>
+                    Ranking por placa · {selectedRankingMonth === "todos" ? "Jan-Abr" : selectedRankingMonth}
+                  </span>
+                </div>
+              </div>
+
+              <ReactECharts option={totalRankingChart} style={{ height: 280, width: "100%" }} />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {showMotorizadoSection && (
+        <section className="slide4-section-block">
+          <div className="slide4-section-header">
+            <span className="slide4-tag">Motorizados</span>
+            <h2 className="slide4-section-title">Manutenção dos motorizados</h2>
           </div>
 
-          <div className="slide4-chart-card">
-            <div className="slide4-chart-header">
-              <div>
-                <strong>Total · maior manutenção</strong>
-                <span>
-                  Ranking por placa ·{" "}
-                  {selectedRankingMonth === "todos" ? "Jan-Abr" : selectedRankingMonth}
-                </span>
+          <div className="slide4-dashboard">
+            <div className="slide4-chart-card">
+              <div className="slide4-chart-header">
+                <div>
+                  <strong>Motorizados · evolução mensal</strong>
+                  <span>Custo total de manutenção por mês</span>
+                </div>
               </div>
+
+              <ReactECharts option={motorizadoMonthlyChart} style={{ height: 280, width: "100%" }} />
             </div>
 
-            <ReactECharts
-              option={totalRankingChart}
-              style={{ height: 280, width: "100%" }}
-            />
-          </div>
-        </div>
-      </section>
-
-      <section className="slide4-section-block">
-        <div className="slide4-section-header">
-          <span className="slide4-tag">Motorizados</span>
-
-          <h2 className="slide4-section-title">
-            Totais de manutenção dos motorizados
-          </h2>
-
-          <p className="slide4-section-subtitle">
-            Custos, OS e ranking específicos dos veículos motorizados.
-          </p>
-        </div>
-
-        <div className="slide3-kpis slide4-kpis">
-          <div className="slide3-kpi slide4-kpi-card">
-            <span>Total motorizados</span>
-            <strong>{formatCurrency(sectionTotals.motorizado.total)}</strong>
-          </div>
-
-          <div className="slide3-kpi slide4-kpi-card">
-            <span>OS motorizados</span>
-            <strong>{formatInteger(sectionTotals.motorizado.os)}</strong>
-          </div>
-
-          <div className="slide3-kpi slide4-kpi-card">
-            <span>Placas motorizadas</span>
-            <strong>{formatInteger(sectionTotals.motorizado.placas)}</strong>
-          </div>
-
-          <div className="slide3-kpi slide4-kpi-card highlight">
-            <span>Custo médio por OS</span>
-            <strong>{formatCurrency(sectionTotals.motorizado.custoMedioOs)}</strong>
-          </div>
-        </div>
-
-        <div className="slide4-dashboard">
-          <div className="slide4-chart-card">
-            <div className="slide4-chart-header">
-              <div>
-                <strong>Motorizados · evolução mensal</strong>
-                <span>Custo total de manutenção por mês</span>
+            <div className="slide4-chart-card">
+              <div className="slide4-chart-header">
+                <div>
+                  <strong>Motorizados · maior manutenção</strong>
+                  <span>
+                    Ranking por placa · {selectedRankingMonth === "todos" ? "Jan-Abr" : selectedRankingMonth}
+                  </span>
+                </div>
               </div>
+
+              <ReactECharts option={motorizadoRankingChart} style={{ height: 280, width: "100%" }} />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {showCarretaSection && (
+        <section className="slide4-section-block">
+          <div className="slide4-section-header">
+            <span className="slide4-tag">Carretas</span>
+            <h2 className="slide4-section-title">Manutenção das carretas</h2>
+          </div>
+
+          <div className="slide4-dashboard">
+            <div className="slide4-chart-card">
+              <div className="slide4-chart-header">
+                <div>
+                  <strong>Carretas · evolução mensal</strong>
+                  <span>Custo total de manutenção por mês</span>
+                </div>
+              </div>
+
+              <ReactECharts option={carretaMonthlyChart} style={{ height: 280, width: "100%" }} />
             </div>
 
-            <ReactECharts
-              option={motorizadoMonthlyChart}
-              style={{ height: 280, width: "100%" }}
-            />
-          </div>
-
-          <div className="slide4-chart-card">
-            <div className="slide4-chart-header">
-              <div>
-                <strong>Motorizados · maior manutenção</strong>
-                <span>
-                  Ranking por placa ·{" "}
-                  {selectedRankingMonth === "todos" ? "Jan-Abr" : selectedRankingMonth}
-                </span>
+            <div className="slide4-chart-card">
+              <div className="slide4-chart-header">
+                <div>
+                  <strong>Carretas · maior manutenção</strong>
+                  <span>
+                    Ranking por placa · {selectedRankingMonth === "todos" ? "Jan-Abr" : selectedRankingMonth}
+                  </span>
+                </div>
               </div>
+
+              <ReactECharts option={carretaRankingChart} style={{ height: 280, width: "100%" }} />
             </div>
-
-            <ReactECharts
-              option={motorizadoRankingChart}
-              style={{ height: 280, width: "100%" }}
-            />
           </div>
-        </div>
-      </section>
-
-      <section className="slide4-section-block">
-        <div className="slide4-section-header">
-          <span className="slide4-tag">Carretas</span>
-
-          <h2 className="slide4-section-title">
-            Totais de manutenção das carretas
-          </h2>
-
-          <p className="slide4-section-subtitle">
-            Custos, OS e ranking específicos das carretas.
-          </p>
-        </div>
-
-        <div className="slide3-kpis slide4-kpis">
-          <div className="slide3-kpi slide4-kpi-card">
-            <span>Total carretas</span>
-            <strong>{formatCurrency(sectionTotals.carreta.total)}</strong>
-          </div>
-
-          <div className="slide3-kpi slide4-kpi-card">
-            <span>OS carretas</span>
-            <strong>{formatInteger(sectionTotals.carreta.os)}</strong>
-          </div>
-
-          <div className="slide3-kpi slide4-kpi-card">
-            <span>Placas carretas</span>
-            <strong>{formatInteger(sectionTotals.carreta.placas)}</strong>
-          </div>
-
-          <div className="slide3-kpi slide4-kpi-card highlight">
-            <span>Custo médio por OS</span>
-            <strong>{formatCurrency(sectionTotals.carreta.custoMedioOs)}</strong>
-          </div>
-        </div>
-
-        <div className="slide4-dashboard">
-          <div className="slide4-chart-card">
-            <div className="slide4-chart-header">
-              <div>
-                <strong>Carretas · evolução mensal</strong>
-                <span>Custo total de manutenção por mês</span>
-              </div>
-            </div>
-
-            <ReactECharts
-              option={carretaMonthlyChart}
-              style={{ height: 280, width: "100%" }}
-            />
-          </div>
-
-          <div className="slide4-chart-card">
-            <div className="slide4-chart-header">
-              <div>
-                <strong>Carretas · maior manutenção</strong>
-                <span>
-                  Ranking por placa ·{" "}
-                  {selectedRankingMonth === "todos" ? "Jan-Abr" : selectedRankingMonth}
-                </span>
-              </div>
-            </div>
-
-            <ReactECharts
-              option={carretaRankingChart}
-              style={{ height: 280, width: "100%" }}
-            />
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <footer className="slide4-warning">
-        <strong>Ponto de melhoria:</strong>
-
+        <strong>Ponto de Melhoria:</strong>
         <span>
-          O ideal é aprofundar os custos totais com tempo ocioso de OS e
-          indicadores como KM/total de manutenção nas próximas análises.
+          O ideal é que possamos averiguar além dos custos totais, verificar o
+          tempo ocioso de OS e a quantidade de KM/total de manutenção. Podemos
+          conseguir estes indicadores nas próximas análises através de um trabalho
+          mais completo.
         </span>
       </footer>
 
@@ -861,7 +790,6 @@ export default function Slide4() {
             <div className="slide3-modal-search">
               <label>
                 Dono / Frota
-
                 <select
                   value={draftSelectedOwner}
                   onChange={(event) => {
@@ -881,7 +809,6 @@ export default function Slide4() {
 
               <label>
                 Placa
-
                 <input
                   value={draftPlateSearch}
                   onChange={(event) => setDraftPlateSearch(event.target.value)}
@@ -912,7 +839,6 @@ export default function Slide4() {
                   onClick={() => setDraftSelectedPlate(item.placa)}
                 >
                   <strong>{item.placa}</strong>
-
                   <span>
                     {item.tipoFrota} · {item.propriedade} · {item.dono}
                   </span>

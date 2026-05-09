@@ -4,10 +4,8 @@ import ReactECharts from "echarts-for-react";
 
 type FilterType = "total" | "proprio" | "terceiro";
 type EfficiencyMetric = "kmPorLitro" | "realPorLitro" | "realPorKm";
-type TotalMetric = "reais" | "litros" | "km";
 
 type TrailerEfficiencyMetric = "litrosPorHora" | "realPorHora";
-type TrailerTotalMetric = "reais" | "litros" | "horas";
 
 type FuelRow = {
   placa: string;
@@ -31,10 +29,43 @@ type TrailerFuelRow = {
   filtro: string;
 };
 
-const FILE_PATH = "/data/Base_Consolidada_Placa_Mes_Transmassa_Cavalos_2026.xlsx";
-const TRAILER_FILE_PATH = "/data/Combustivel_Carretas_Termoking_Transmassa_2026.xlsx";
+type ChartParam = {
+  axisValue?: string;
+  marker?: string;
+  seriesName: string;
+  value: number;
+};
+
+const FILE_PATH =
+  "/data/Base_Consolidada_Placa_Mes_Transmassa_Motorizados_2026.xlsx";
+
+const LEGACY_FILE_PATH =
+  "/data/Base_Consolidada_Placa_Mes_Transmassa_" + "Cava" + "los_2026.xlsx";
+
+const TRAILER_FILE_PATH =
+  "/data/Combustivel_Carretas_Termoking_Transmassa_2026.xlsx";
 
 const monthOrder = ["Janeiro", "Fevereiro", "Março", "Abril"];
+
+async function fetchArrayBufferFromPaths(paths: string[]) {
+  let lastError: unknown = null;
+
+  for (const path of paths) {
+    try {
+      const response = await fetch(path);
+
+      if (response.ok) {
+        return response.arrayBuffer();
+      }
+
+      lastError = new Error(`Arquivo não encontrado: ${path}`);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error("Nenhum arquivo encontrado.");
+}
 
 function normalizeText(value: unknown) {
   return String(value ?? "")
@@ -70,6 +101,7 @@ function getValue(row: Record<string, unknown>, aliases: string[]) {
 function excelDateToMonthName(value: number) {
   const excelEpoch = new Date(Date.UTC(1899, 11, 30));
   const date = new Date(excelEpoch.getTime() + value * 86400000);
+
   const monthIndex = date.getUTCMonth();
 
   return monthOrder[monthIndex] ?? String(value);
@@ -92,13 +124,7 @@ function getMonthName(value: unknown) {
 
 function isProprio(value: string) {
   const text = normalizeText(value);
-
-  return (
-    text.includes("proprio") ||
-    text.includes("próprio") ||
-    text.includes("transmassa") ||
-    text.includes("alx")
-  );
+  return text.includes("proprio") || text.includes("transmassa");
 }
 
 function isFalseFilter(value: unknown) {
@@ -117,8 +143,7 @@ function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 0,
   });
 }
 
@@ -131,23 +156,8 @@ function formatDecimal(value: number) {
 
 function formatNumber(value: number) {
   return value.toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 0,
   });
-}
-
-function formatCompactCurrency(value: number) {
-  return `R$ ${(value / 1000).toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}k`;
-}
-
-function formatCompactNumber(value: number) {
-  return `${(value / 1000).toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}k`;
 }
 
 function metricLabel(metric: EfficiencyMetric) {
@@ -155,16 +165,6 @@ function metricLabel(metric: EfficiencyMetric) {
     kmPorLitro: "KM/L",
     realPorLitro: "R$/L",
     realPorKm: "R$/KM",
-  };
-
-  return labels[metric];
-}
-
-function totalLabel(metric: TotalMetric) {
-  const labels: Record<TotalMetric, string> = {
-    reais: "Reais",
-    litros: "Litros",
-    km: "KM",
   };
 
   return labels[metric];
@@ -179,14 +179,19 @@ function trailerMetricLabel(metric: TrailerEfficiencyMetric) {
   return labels[metric];
 }
 
-function trailerTotalLabel(metric: TrailerTotalMetric) {
-  const labels: Record<TrailerTotalMetric, string> = {
-    reais: "Reais",
-    litros: "Litros",
-    horas: "Horas",
-  };
+function formatReaisLitrosTooltip(params: ChartParam[]) {
+  const title = params[0]?.axisValue ?? "";
 
-  return labels[metric];
+  const lines = params.map((item) => {
+    const value =
+      item.seriesName === "Reais"
+        ? formatCurrency(Number(item.value))
+        : `${formatNumber(Number(item.value))} L`;
+
+    return `${item.marker ?? ""} ${item.seriesName}: <strong>${value}</strong>`;
+  });
+
+  return [title, ...lines].join("<br />");
 }
 
 export default function Slide3() {
@@ -194,36 +199,31 @@ export default function Slide3() {
   const [trailerRows, setTrailerRows] = useState<TrailerFuelRow[]>([]);
 
   const [filter, setFilter] = useState<FilterType>("total");
-  const [selectedOwner, setSelectedOwner] = useState("total");
-
+  const [selectedMotorizedOwner, setSelectedMotorizedOwner] = useState("total");
   const [selectedMotorizedPlate, setSelectedMotorizedPlate] = useState("total");
   const [selectedTrailerPlate, setSelectedTrailerPlate] = useState("total");
 
-  const [isMotorizedPlateModalOpen, setIsMotorizedPlateModalOpen] = useState(false);
-  const [isTrailerPlateModalOpen, setIsTrailerPlateModalOpen] = useState(false);
-
-  const [draftPlateSearch, setDraftPlateSearch] = useState("");
-  const [draftSelectedOwner, setDraftSelectedOwner] = useState("total");
+  const [isPlateModalOpen, setIsPlateModalOpen] = useState(false);
+  const [draftMotorizedPlateSearch, setDraftMotorizedPlateSearch] = useState("");
+  const [draftTrailerPlateSearch, setDraftTrailerPlateSearch] = useState("");
+  const [draftSelectedMotorizedOwner, setDraftSelectedMotorizedOwner] = useState("total");
   const [draftSelectedMotorizedPlate, setDraftSelectedMotorizedPlate] = useState("total");
   const [draftSelectedTrailerPlate, setDraftSelectedTrailerPlate] = useState("total");
 
   const [efficiencyMetric, setEfficiencyMetric] =
     useState<EfficiencyMetric>("kmPorLitro");
 
-  const [totalMetric, setTotalMetric] = useState<TotalMetric>("reais");
-
   const [trailerEfficiencyMetric, setTrailerEfficiencyMetric] =
     useState<TrailerEfficiencyMetric>("realPorHora");
-
-  const [trailerTotalMetric, setTrailerTotalMetric] =
-    useState<TrailerTotalMetric>("reais");
 
   const [trailerQualityFilter, setTrailerQualityFilter] = useState("total");
 
   useEffect(() => {
     async function loadData() {
-      const response = await fetch(FILE_PATH);
-      const arrayBuffer = await response.arrayBuffer();
+      const arrayBuffer = await fetchArrayBufferFromPaths([
+        FILE_PATH,
+        LEGACY_FILE_PATH,
+      ]);
       const workbook = XLSX.read(arrayBuffer, { type: "array" });
 
       const sheetName =
@@ -239,7 +239,9 @@ export default function Slide3() {
 
       const parsedRows = rawRows
         .map((row) => {
-          const placa = String(getValue(row, ["placa", "veiculo", "veículo"])).trim();
+          const placa = String(
+            getValue(row, ["placa", "veiculo", "veículo"])
+          ).trim();
 
           const mes = getMonthName(
             getValue(row, ["mês", "mes", "competência", "competencia"])
@@ -268,7 +270,9 @@ export default function Slide3() {
             ])
           );
 
-          const litros = toNumber(getValue(row, ["litros", "litragem", "volume"]));
+          const litros = toNumber(
+            getValue(row, ["litros", "litragem", "volume"])
+          );
 
           const km = toNumber(
             getValue(row, [
@@ -278,7 +282,14 @@ export default function Slide3() {
             ])
           );
 
-          return { placa, mes, propriedade, reais, litros, km };
+          return {
+            placa,
+            mes,
+            propriedade,
+            reais,
+            litros,
+            km,
+          };
         })
         .filter((row) => row.placa && monthOrder.includes(row.mes));
 
@@ -290,8 +301,7 @@ export default function Slide3() {
 
   useEffect(() => {
     async function loadTrailerData() {
-      const response = await fetch(TRAILER_FILE_PATH);
-      const arrayBuffer = await response.arrayBuffer();
+      const arrayBuffer = await fetchArrayBufferFromPaths([TRAILER_FILE_PATH]);
       const workbook = XLSX.read(arrayBuffer, { type: "array" });
 
       const sheetName =
@@ -311,14 +321,18 @@ export default function Slide3() {
 
       const parsedRows = rawRows
         .map((row) => {
-          const placa = String(getValue(row, ["placa", "veiculo", "veículo"])).trim();
+          const placa = String(
+            getValue(row, ["placa", "veiculo", "veículo"])
+          ).trim();
 
           let mes = getMonthName(
             getValue(row, ["mês", "mes", "competência", "competencia"])
           );
 
           if (!monthOrder.includes(mes)) {
-            mes = getMonthName(getValue(row, ["data fim", "data_fim", "data"]));
+            mes = getMonthName(
+              getValue(row, ["data fim", "data_fim", "data"])
+            );
           }
 
           const propriedade = String(
@@ -345,7 +359,9 @@ export default function Slide3() {
             ])
           );
 
-          const litros = toNumber(getValue(row, ["litros", "litragem", "volume"]));
+          const litros = toNumber(
+            getValue(row, ["litros", "litragem", "volume"])
+          );
 
           const horas = toNumber(
             getValue(row, [
@@ -417,15 +433,28 @@ export default function Slide3() {
   }, [rows]);
 
   const trailerPlateOptions = useMemo(() => {
-    return Array.from(
-      new Set(trailerRows.map((row) => row.placa).filter(Boolean))
-    ).sort();
+    const map = new Map<string, { placa: string; propriedade: string }>();
+
+    trailerRows.forEach((row) => {
+      if (!map.has(row.placa)) {
+        map.set(row.placa, {
+          placa: row.placa,
+          propriedade: row.propriedade || "Não informado",
+        });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.placa.localeCompare(b.placa)
+    );
   }, [trailerRows]);
 
   const ownerOptions = useMemo(() => {
     return Array.from(
       new Set(
-        rows.map((row) => row.propriedade || "Não informado").filter(Boolean)
+        rows
+          .map((row) => row.propriedade || "Não informado")
+          .filter(Boolean)
       )
     ).sort();
   }, [rows]);
@@ -433,77 +462,67 @@ export default function Slide3() {
   const modalMotorizedPlateOptions = useMemo(() => {
     return motorizedPlateOptions.filter((item) => {
       const matchOwner =
-        draftSelectedOwner === "total"
+        draftSelectedMotorizedOwner === "total"
           ? true
-          : item.propriedade === draftSelectedOwner;
+          : item.propriedade === draftSelectedMotorizedOwner;
 
-      const matchPlate = draftPlateSearch
-        ? normalizeText(item.placa).includes(normalizeText(draftPlateSearch))
+      const matchPlate = draftMotorizedPlateSearch
+        ? normalizeText(item.placa).includes(normalizeText(draftMotorizedPlateSearch))
         : true;
 
       return matchOwner && matchPlate;
     });
-  }, [motorizedPlateOptions, draftSelectedOwner, draftPlateSearch]);
+  }, [motorizedPlateOptions, draftSelectedMotorizedOwner, draftMotorizedPlateSearch]);
 
   const modalTrailerPlateOptions = useMemo(() => {
-    return trailerPlateOptions.filter((placa) => {
-      return draftPlateSearch
-        ? normalizeText(placa).includes(normalizeText(draftPlateSearch))
+    return trailerPlateOptions.filter((item) => {
+      return draftTrailerPlateSearch
+        ? normalizeText(item.placa).includes(normalizeText(draftTrailerPlateSearch))
         : true;
     });
-  }, [trailerPlateOptions, draftPlateSearch]);
+  }, [trailerPlateOptions, draftTrailerPlateSearch]);
 
-  function openMotorizedPlateModal() {
-    setDraftSelectedOwner(selectedOwner);
+  function openPlateModal() {
+    setDraftSelectedMotorizedOwner(selectedMotorizedOwner);
     setDraftSelectedMotorizedPlate(selectedMotorizedPlate);
-    setDraftPlateSearch("");
-    setIsMotorizedPlateModalOpen(true);
-  }
-
-  function openTrailerPlateModal() {
     setDraftSelectedTrailerPlate(selectedTrailerPlate);
-    setDraftPlateSearch("");
-    setIsTrailerPlateModalOpen(true);
+    setDraftMotorizedPlateSearch("");
+    setDraftTrailerPlateSearch("");
+    setIsPlateModalOpen(true);
   }
 
-  function applyMotorizedPlateSelection() {
-    setSelectedOwner(draftSelectedOwner);
+  function applyPlateSelection() {
+    setSelectedMotorizedOwner(draftSelectedMotorizedOwner);
     setSelectedMotorizedPlate(draftSelectedMotorizedPlate);
-    setIsMotorizedPlateModalOpen(false);
-  }
-
-  function applyTrailerPlateSelection() {
     setSelectedTrailerPlate(draftSelectedTrailerPlate);
-    setIsTrailerPlateModalOpen(false);
+    setIsPlateModalOpen(false);
   }
 
-  function clearMotorizedPlateSelection() {
-    setDraftSelectedOwner("total");
+  function clearPlateSelection() {
+    setDraftSelectedMotorizedOwner("total");
     setDraftSelectedMotorizedPlate("total");
-    setSelectedOwner("total");
-    setSelectedMotorizedPlate("total");
-    setIsMotorizedPlateModalOpen(false);
-  }
-
-  function clearTrailerPlateSelection() {
     setDraftSelectedTrailerPlate("total");
+
+    setSelectedMotorizedOwner("total");
+    setSelectedMotorizedPlate("total");
     setSelectedTrailerPlate("total");
-    setIsTrailerPlateModalOpen(false);
+
+    setIsPlateModalOpen(false);
   }
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
-      const motorizedIsProprio = isProprio(row.propriedade);
-
       const matchOwnership =
         filter === "total"
           ? true
           : filter === "proprio"
-            ? motorizedIsProprio
-            : !motorizedIsProprio;
+            ? isProprio(row.propriedade)
+            : !isProprio(row.propriedade);
 
       const matchOwner =
-        selectedOwner === "total" ? true : row.propriedade === selectedOwner;
+        selectedMotorizedOwner === "total"
+          ? true
+          : row.propriedade === selectedMotorizedOwner;
 
       const matchPlate =
         selectedMotorizedPlate === "total"
@@ -512,7 +531,7 @@ export default function Slide3() {
 
       return matchOwnership && matchOwner && matchPlate;
     });
-  }, [rows, filter, selectedOwner, selectedMotorizedPlate]);
+  }, [rows, filter, selectedMotorizedOwner, selectedMotorizedPlate]);
 
   const monthly = useMemo(() => {
     return monthOrder.map((mes) => {
@@ -551,20 +570,6 @@ export default function Slide3() {
 
   const filteredTrailerRows = useMemo(() => {
     return trailerRows.filter((row) => {
-      const trailerIsProprio = isProprio(row.propriedade);
-
-      const matchOwnership =
-        filter === "total"
-          ? true
-          : filter === "proprio"
-            ? trailerIsProprio
-            : !trailerIsProprio;
-
-      const matchTrailerPlate =
-        selectedTrailerPlate === "total"
-          ? true
-          : row.placa === selectedTrailerPlate;
-
       const matchQuality =
         trailerQualityFilter === "total"
           ? true
@@ -572,9 +577,12 @@ export default function Slide3() {
               normalizeText(trailerQualityFilter)
             );
 
-      return matchOwnership && matchTrailerPlate && matchQuality;
+      const matchPlate =
+        selectedTrailerPlate === "total" ? true : row.placa === selectedTrailerPlate;
+
+      return matchQuality && matchPlate;
     });
-  }, [trailerRows, filter, selectedTrailerPlate, trailerQualityFilter]);
+  }, [trailerRows, trailerQualityFilter, selectedTrailerPlate]);
 
   const trailerMonthly = useMemo(() => {
     return monthOrder.map((mes) => {
@@ -611,41 +619,24 @@ export default function Slide3() {
     };
   }, [filteredTrailerRows]);
 
-  const combinedMonthly = useMemo(() => {
-    return monthOrder.map((mes) => {
-      const motorizedMonth = monthly.find((item) => item.mes === mes);
-      const trailerMonth = trailerMonthly.find((item) => item.mes === mes);
-
-      const reais = (motorizedMonth?.reais ?? 0) + (trailerMonth?.reais ?? 0);
-      const litros = (motorizedMonth?.litros ?? 0) + (trailerMonth?.litros ?? 0);
-
-      return {
-        mes,
-        reais,
-        litros,
-        realPorLitro: litros > 0 ? reais / litros : 0,
-      };
-    });
-  }, [monthly, trailerMonthly]);
-
-  const combinedTotals = useMemo(() => {
-    const reais = combinedMonthly.reduce((sum, row) => sum + row.reais, 0);
-    const litros = combinedMonthly.reduce((sum, row) => sum + row.litros, 0);
-
-    return {
-      reais,
-      litros,
-      realPorLitro: litros > 0 ? reais / litros : 0,
-    };
-  }, [combinedMonthly]);
-
   const trailerQualityOptions = useMemo(() => {
     return Array.from(
       new Set(
-        trailerRows.map((row) => row.qualidade || "Não informado").filter(Boolean)
+        trailerRows
+          .map((row) => row.qualidade || "Não informado")
+          .filter(Boolean)
       )
     ).sort();
   }, [trailerRows]);
+
+  const selectedPairLabel = useMemo(() => {
+    const motorized =
+      selectedMotorizedPlate === "total" ? "Todos os motorizados" : selectedMotorizedPlate;
+    const trailer =
+      selectedTrailerPlate === "total" ? "Todas as carretas" : selectedTrailerPlate;
+
+    return { motorized, trailer };
+  }, [selectedMotorizedPlate, selectedTrailerPlate]);
 
   const efficiencyChart = {
     grid: { left: 58, right: 22, top: 28, bottom: 34 },
@@ -677,36 +668,55 @@ export default function Slide3() {
   };
 
   const totalsChart = {
-    grid: { left: 72, right: 22, top: 28, bottom: 34 },
+    grid: { left: 78, right: 68, top: 34, bottom: 34 },
+    legend: { top: 0, right: 0 },
     tooltip: {
       trigger: "axis",
-      valueFormatter: (value: number) =>
-        totalMetric === "reais" ? formatCurrency(value) : formatNumber(value),
+      formatter: (params: ChartParam[]) => formatReaisLitrosTooltip(params),
     },
     xAxis: {
       type: "category",
       data: monthly.map((item) => item.mes),
       axisTick: { show: false },
     },
-    yAxis: {
-      type: "value",
-      axisLabel: {
-        formatter: (value: number) =>
-          totalMetric === "reais"
-            ? formatCompactCurrency(value)
-            : formatCompactNumber(value),
+    yAxis: [
+      {
+        type: "value",
+        name: "Reais",
+        axisLabel: {
+          formatter: (value: number) => `R$ ${(value / 1000).toFixed(0)}k`,
+        },
+        splitLine: { lineStyle: { color: "#e5e7eb" } },
       },
-      splitLine: { lineStyle: { color: "#e5e7eb" } },
-    },
+      {
+        type: "value",
+        name: "Litros",
+        axisLabel: {
+          formatter: (value: number) => `${(value / 1000).toFixed(0)}k L`,
+        },
+        splitLine: { show: false },
+      },
+    ],
     series: [
       {
-        name: totalLabel(totalMetric),
+        name: "Reais",
         type: "bar",
-        data: monthly.map((item) => item[totalMetric]),
-        barWidth: 40,
+        data: monthly.map((item) => item.reais),
+        barWidth: 28,
         itemStyle: {
-          borderRadius: [12, 12, 0, 0],
+          borderRadius: [10, 10, 0, 0],
           color: "#b01625",
+        },
+      },
+      {
+        name: "Litros",
+        type: "bar",
+        yAxisIndex: 1,
+        data: monthly.map((item) => item.litros),
+        barWidth: 28,
+        itemStyle: {
+          borderRadius: [10, 10, 0, 0],
+          color: "#64748b",
         },
       },
     ],
@@ -742,57 +752,15 @@ export default function Slide3() {
   };
 
   const trailerTotalsChart = {
-    grid: { left: 78, right: 22, top: 28, bottom: 34 },
+    grid: { left: 78, right: 68, top: 34, bottom: 34 },
+    legend: { top: 0, right: 0 },
     tooltip: {
       trigger: "axis",
-      valueFormatter: (value: number) =>
-        trailerTotalMetric === "reais"
-          ? formatCurrency(value)
-          : formatNumber(value),
+      formatter: (params: ChartParam[]) => formatReaisLitrosTooltip(params),
     },
     xAxis: {
       type: "category",
       data: trailerMonthly.map((item) => item.mes),
-      axisTick: { show: false },
-    },
-    yAxis: {
-      type: "value",
-      axisLabel: {
-        formatter: (value: number) =>
-          trailerTotalMetric === "reais"
-            ? formatCompactCurrency(value)
-            : formatCompactNumber(value),
-      },
-      splitLine: { lineStyle: { color: "#e5e7eb" } },
-    },
-    series: [
-      {
-        name: trailerTotalLabel(trailerTotalMetric),
-        type: "bar",
-        data: trailerMonthly.map((item) => item[trailerTotalMetric]),
-        barWidth: 40,
-        itemStyle: {
-          borderRadius: [12, 12, 0, 0],
-          color: "#991b1b",
-        },
-      },
-    ],
-  };
-
-  const combinedTotalsChart = {
-    grid: { left: 78, right: 78, top: 40, bottom: 34 },
-    tooltip: {
-      trigger: "axis",
-      axisPointer: { type: "shadow" },
-      valueFormatter: (value: number) => formatDecimal(value),
-    },
-    legend: {
-      top: 0,
-      right: 0,
-    },
-    xAxis: {
-      type: "category",
-      data: combinedMonthly.map((item) => item.mes),
       axisTick: { show: false },
     },
     yAxis: [
@@ -800,7 +768,7 @@ export default function Slide3() {
         type: "value",
         name: "Reais",
         axisLabel: {
-          formatter: (value: number) => formatCompactCurrency(value),
+          formatter: (value: number) => `R$ ${(value / 1000).toFixed(0)}k`,
         },
         splitLine: { lineStyle: { color: "#e5e7eb" } },
       },
@@ -808,7 +776,7 @@ export default function Slide3() {
         type: "value",
         name: "Litros",
         axisLabel: {
-          formatter: (value: number) => formatCompactNumber(value),
+          formatter: (value: number) => `${(value / 1000).toFixed(0)}k L`,
         },
         splitLine: { show: false },
       },
@@ -817,55 +785,23 @@ export default function Slide3() {
       {
         name: "Reais",
         type: "bar",
-        data: combinedMonthly.map((item) => item.reais),
-        barWidth: 34,
+        data: trailerMonthly.map((item) => item.reais),
+        barWidth: 28,
         itemStyle: {
           borderRadius: [10, 10, 0, 0],
-          color: "#b01625",
+          color: "#991b1b",
         },
       },
       {
         name: "Litros",
-        type: "line",
+        type: "bar",
         yAxisIndex: 1,
-        smooth: true,
-        symbolSize: 9,
-        data: combinedMonthly.map((item) => item.litros),
-        lineStyle: { width: 4, color: "#0f172a" },
-        itemStyle: { color: "#0f172a" },
-      },
-    ],
-  };
-
-  const combinedRealPerLiterChart = {
-    grid: { left: 58, right: 28, top: 30, bottom: 34 },
-    tooltip: {
-      trigger: "axis",
-      valueFormatter: (value: number) => `R$ ${formatDecimal(value)}`,
-    },
-    xAxis: {
-      type: "category",
-      data: combinedMonthly.map((item) => item.mes),
-      axisTick: { show: false },
-    },
-    yAxis: {
-      type: "value",
-      name: "R$/L",
-      axisLabel: {
-        formatter: (value: number) => `R$ ${formatDecimal(value)}`,
-      },
-      splitLine: { lineStyle: { color: "#e5e7eb" } },
-    },
-    series: [
-      {
-        name: "R$/L geral",
-        type: "line",
-        smooth: true,
-        symbolSize: 10,
-        data: combinedMonthly.map((item) => item.realPorLitro),
-        lineStyle: { width: 4, color: "#7f1d1d" },
-        itemStyle: { color: "#b01625" },
-        areaStyle: { color: "rgba(176, 22, 37, 0.10)" },
+        data: trailerMonthly.map((item) => item.litros),
+        barWidth: 28,
+        itemStyle: {
+          borderRadius: [10, 10, 0, 0],
+          color: "#64748b",
+        },
       },
     ],
   };
@@ -880,40 +816,23 @@ export default function Slide3() {
 
           <p className="slide3-subtitle">
             Acompanhamento de KM oficial, litros, valor total e eficiência da
-            frota no período de Janeiro a Abril/2026.
+            frota motorizada e das carretas no período de Janeiro a Abril/2026.
           </p>
         </div>
 
         <div className="slide3-controls">
-          <div className="slide3-plate-selector-grid">
-            <button
-              type="button"
-              className="slide3-open-modal-button"
-              onClick={openMotorizedPlateModal}
-            >
-              <span>Placa Motorizado</span>
+          <button
+            type="button"
+            className="slide3-open-modal-button"
+            onClick={openPlateModal}
+          >
+            <span>Par selecionado</span>
 
-              <strong>
-                {selectedMotorizedPlate === "total"
-                  ? "Motorizado selecionado"
-                  : selectedMotorizedPlate}
-              </strong>
-            </button>
-
-            <button
-              type="button"
-              className="slide3-open-modal-button"
-              onClick={openTrailerPlateModal}
-            >
-              <span>Placa Carreta</span>
-
-              <strong>
-                {selectedTrailerPlate === "total"
-                  ? "Carreta selecionada"
-                  : selectedTrailerPlate}
-              </strong>
-            </button>
-          </div>
+            <strong className="slide3-selected-pair">
+              <small>Motorizado: {selectedPairLabel.motorized}</small>
+              <small>Carreta: {selectedPairLabel.trailer}</small>
+            </strong>
+          </button>
 
           <div className="slide3-filter">
             <button
@@ -940,97 +859,33 @@ export default function Slide3() {
         </div>
       </header>
 
-
-
-      <section className="slide3-total-section">
-        <div className="slide3-total-header">
-          <div>
-            <span className="slide3-tag">Totais</span>
-
-            <h2 className="slide3-total-title">Total geral de combustível</h2>
-
-            <p className="slide3-total-subtitle">
-              Soma mensal dos motorizados e das carretas para visão consolidada
-              do gasto total.
-            </p>
-          </div>
-
-          <div className="slide3-total-kpis">
-            <div className="slide3-kpi">
-              <span>Total em reais</span>
-              <strong>{formatCurrency(combinedTotals.reais)}</strong>
-            </div>
-
-            <div className="slide3-kpi">
-              <span>Total em litros</span>
-              <strong>{formatNumber(combinedTotals.litros)}</strong>
-            </div>
-
-            <div className="slide3-kpi highlight">
-              <span>R$/L geral</span>
-              <strong>{formatDecimal(combinedTotals.realPorLitro)}</strong>
-            </div>
-          </div>
-        </div>
-
-        <div className="slide3-dashboard">
-          <div className="slide3-chart-card">
-            <div className="slide3-chart-header">
-              <div>
-                <strong>Evolução mensal consolidada</strong>
-                <span>Total do mês: Reais + Litros</span>
-              </div>
-            </div>
-
-            <ReactECharts
-              option={combinedTotalsChart}
-              style={{ height: 300, width: "100%" }}
-            />
-          </div>
-
-          <div className="slide3-chart-card">
-            <div className="slide3-chart-header">
-              <div>
-                <strong>Evolução do preço pago</strong>
-                <span>Indicador consolidado: R$/L</span>
-              </div>
-            </div>
-
-            <ReactECharts
-              option={combinedRealPerLiterChart}
-              style={{ height: 300, width: "100%" }}
-            />
-          </div>
-        </div>
-      </section>
-
-      <h2 className="slide3-section-title">Motorizados</h2>
       <div className="slide3-kpis">
         <div className="slide3-kpi">
-          <span>Reais motorizados 2026</span>
+          <span>Reais totais motorizado</span>
           <strong>{formatCurrency(totals.reais)}</strong>
         </div>
 
         <div className="slide3-kpi">
-          <span>Litros motorizados 2026</span>
+          <span>Litros totais motorizado</span>
           <strong>{formatNumber(totals.litros)}</strong>
         </div>
 
         <div className="slide3-kpi">
-          <span>KM motorizados 2026</span>
+          <span>KM totais motorizado</span>
           <strong>{formatNumber(totals.km)}</strong>
         </div>
 
         <div className="slide3-kpi highlight">
-          <span>R$/KM médio 2026</span>
+          <span>R$/KM médio motorizado</span>
           <strong>{formatDecimal(totals.realPorKm)}</strong>
         </div>
       </div>
+
       <div className="slide3-dashboard">
         <div className="slide3-chart-card">
           <div className="slide3-chart-header">
             <div>
-              <strong>Indicador de eficiência</strong>
+              <strong>Indicador de eficiência dos motorizados</strong>
               <span>{metricLabel(efficiencyMetric)}</span>
             </div>
 
@@ -1055,20 +910,9 @@ export default function Slide3() {
         <div className="slide3-chart-card">
           <div className="slide3-chart-header">
             <div>
-              <strong>Totais mês a mês</strong>
-              <span>{totalLabel(totalMetric)}</span>
+              <strong>Totais dos motorizados mês a mês</strong>
+              <span>Reais + Litros</span>
             </div>
-
-            <select
-              value={totalMetric}
-              onChange={(event) =>
-                setTotalMetric(event.target.value as TotalMetric)
-              }
-            >
-              <option value="reais">Reais</option>
-              <option value="litros">Litros</option>
-              <option value="km">KM</option>
-            </select>
           </div>
 
           <ReactECharts
@@ -1083,7 +927,9 @@ export default function Slide3() {
           <div>
             <span className="slide3-tag">Carretas / Termoking</span>
 
-            <h2 className="slide3-trailer-title">Carretas</h2>
+            <h2 className="slide3-trailer-title">
+              Abastecimento das carretas
+            </h2>
           </div>
 
           <div className="slide3-trailer-controls">
@@ -1124,17 +970,25 @@ export default function Slide3() {
             <strong>{formatNumber(trailerTotals.horas)}</strong>
           </div>
 
-          <div className="slide3-kpi highlight slide3-kpi-double">
-          <div>
+          <div className="slide3-kpi highlight">
             <span>R$/hora médio</span>
             <strong>{formatDecimal(trailerTotals.realPorHora)}</strong>
           </div>
 
-          <div>
+          <div className="slide3-kpi">
             <span>L/h médio</span>
             <strong>{formatDecimal(trailerTotals.litrosPorHora)}</strong>
           </div>
-        </div>
+
+          <div className="slide3-kpi">
+            <span>Placas analisadas</span>
+            <strong>{formatNumber(trailerTotals.placas)}</strong>
+          </div>
+
+          <div className="slide3-kpi">
+            <span>Períodos válidos</span>
+            <strong>{formatNumber(trailerTotals.periodos)}</strong>
+          </div>
         </div>
 
         <div className="slide3-dashboard">
@@ -1168,19 +1022,8 @@ export default function Slide3() {
             <div className="slide3-chart-header">
               <div>
                 <strong>Totais das carretas mês a mês</strong>
-                <span>{trailerTotalLabel(trailerTotalMetric)}</span>
+                <span>Reais + Litros</span>
               </div>
-
-              <select
-                value={trailerTotalMetric}
-                onChange={(event) =>
-                  setTrailerTotalMetric(event.target.value as TrailerTotalMetric)
-                }
-              >
-                <option value="reais">Reais</option>
-                <option value="litros">Litros</option>
-                <option value="horas">Horas</option>
-              </select>
             </div>
 
             <ReactECharts
@@ -1194,43 +1037,44 @@ export default function Slide3() {
           <strong>Leitura executiva:</strong>
 
           <p>
-            A análise das carretas deve ser lida de forma diferente dos
-            motorizados. Aqui, o objetivo não é medir KM/L, mas sim quanto o
-            Termoking consome por hora ligada. Por isso, os principais
-            indicadores são R$/h e L/h. Registros inconsistentes foram retirados
-            da análise para evitar distorções provocadas por horímetro incorreto,
-            períodos inconsistentes ou lançamentos que não representam operação
-            confiável.
+            A análise das carretas deve ser lida de forma diferente dos motorizados.
+            Aqui, o objetivo não é medir KM/L, mas sim quanto o Termoking consome
+            por hora ligada. Por isso, os principais indicadores são R$/h e L/h.
+            Registros inconsistentes foram retirados da análise para
+            evitar distorções provocadas por horímetro incorreto, períodos
+            inconsistentes ou lançamentos que não representam operação confiável.
           </p>
         </div>
       </section>
 
-      {isMotorizedPlateModalOpen && (
+      {isPlateModalOpen && (
         <div className="slide3-modal-backdrop">
-          <div className="slide3-modal">
+          <div className="slide3-modal slide3-modal-pair">
             <div className="slide3-modal-header">
               <div>
-                <strong>Selecionar motorizado</strong>
-                <span>Procure por dono/propriedade e escolha uma placa.</span>
+                <strong>Selecionar par de análise</strong>
+                <span>
+                  Escolha uma placa de motorizado e uma placa de carreta para analisar o conjunto.
+                </span>
               </div>
 
               <button
                 type="button"
                 className="slide3-modal-close"
-                onClick={() => setIsMotorizedPlateModalOpen(false)}
+                onClick={() => setIsPlateModalOpen(false)}
               >
                 ×
               </button>
             </div>
 
-            <div className="slide3-modal-search">
+            <div className="slide3-modal-search slide3-modal-search-pair">
               <label>
-                Dono / Frota
+                Dono / Frota do motorizado
 
                 <select
-                  value={draftSelectedOwner}
+                  value={draftSelectedMotorizedOwner}
                   onChange={(event) => {
-                    setDraftSelectedOwner(event.target.value);
+                    setDraftSelectedMotorizedOwner(event.target.value);
                     setDraftSelectedMotorizedPlate("total");
                   }}
                 >
@@ -1245,126 +1089,95 @@ export default function Slide3() {
               </label>
 
               <label>
-                Placa Motorizado
+                Buscar motorizado
 
                 <input
-                  value={draftPlateSearch}
-                  onChange={(event) => setDraftPlateSearch(event.target.value)}
+                  value={draftMotorizedPlateSearch}
+                  onChange={(event) => setDraftMotorizedPlateSearch(event.target.value)}
                   placeholder="Ex: ABC1D23..."
+                />
+              </label>
+
+              <label>
+                Buscar carreta
+
+                <input
+                  value={draftTrailerPlateSearch}
+                  onChange={(event) => setDraftTrailerPlateSearch(event.target.value)}
+                  placeholder="Ex: XYZ9A88..."
                 />
               </label>
             </div>
 
-            <div className="slide3-modal-list">
-              <button
-                type="button"
-                className={`slide3-modal-item ${
-                  draftSelectedMotorizedPlate === "total" ? "active" : ""
-                }`}
-                onClick={() => setDraftSelectedMotorizedPlate("total")}
-              >
-                <strong>Todos os motorizados</strong>
-                <span>Visualizar total filtrado</span>
-              </button>
+            <div className="slide3-modal-dual-list">
+              <div className="slide3-modal-list-panel">
+                <strong className="slide3-modal-list-title">Motorizados</strong>
 
-              {modalMotorizedPlateOptions.map((item) => (
-                <button
-                  key={item.placa}
-                  type="button"
-                  className={`slide3-modal-item ${
-                    draftSelectedMotorizedPlate === item.placa ? "active" : ""
-                  }`}
-                  onClick={() => setDraftSelectedMotorizedPlate(item.placa)}
-                >
-                  <strong>{item.placa}</strong>
-                  <span>{item.propriedade || "Não informado"}</span>
-                </button>
-              ))}
-            </div>
+                <div className="slide3-modal-list">
+                  <button
+                    type="button"
+                    className={`slide3-modal-item ${
+                      draftSelectedMotorizedPlate === "total" ? "active" : ""
+                    }`}
+                    onClick={() => setDraftSelectedMotorizedPlate("total")}
+                  >
+                    <strong>Todos os motorizados</strong>
+                    <span>Visualizar total filtrado</span>
+                  </button>
 
-            <div className="slide3-modal-footer">
-              <button
-                type="button"
-                className="slide3-modal-secondary"
-                onClick={clearMotorizedPlateSelection}
-              >
-                Limpar
-              </button>
-
-              <button
-                type="button"
-                className="slide3-modal-primary"
-                onClick={applyMotorizedPlateSelection}
-              >
-                Aplicar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isTrailerPlateModalOpen && (
-        <div className="slide3-modal-backdrop">
-          <div className="slide3-modal">
-            <div className="slide3-modal-header">
-              <div>
-                <strong>Selecionar carreta</strong>
-                <span>Procure e escolha uma placa de carreta.</span>
+                  {modalMotorizedPlateOptions.map((item) => (
+                    <button
+                      key={item.placa}
+                      type="button"
+                      className={`slide3-modal-item ${
+                        draftSelectedMotorizedPlate === item.placa ? "active" : ""
+                      }`}
+                      onClick={() => setDraftSelectedMotorizedPlate(item.placa)}
+                    >
+                      <strong>{item.placa}</strong>
+                      <span>{item.propriedade || "Não informado"}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <button
-                type="button"
-                className="slide3-modal-close"
-                onClick={() => setIsTrailerPlateModalOpen(false)}
-              >
-                ×
-              </button>
-            </div>
+              <div className="slide3-modal-list-panel">
+                <strong className="slide3-modal-list-title">Carretas</strong>
 
-            <div className="slide3-modal-search">
-              <label>
-                Placa Carreta
+                <div className="slide3-modal-list">
+                  <button
+                    type="button"
+                    className={`slide3-modal-item ${
+                      draftSelectedTrailerPlate === "total" ? "active" : ""
+                    }`}
+                    onClick={() => setDraftSelectedTrailerPlate("total")}
+                  >
+                    <strong>Todas as carretas</strong>
+                    <span>Visualizar total filtrado</span>
+                  </button>
 
-                <input
-                  value={draftPlateSearch}
-                  onChange={(event) => setDraftPlateSearch(event.target.value)}
-                  placeholder="Ex: ABC1D23..."
-                />
-              </label>
-            </div>
-
-            <div className="slide3-modal-list">
-              <button
-                type="button"
-                className={`slide3-modal-item ${
-                  draftSelectedTrailerPlate === "total" ? "active" : ""
-                }`}
-                onClick={() => setDraftSelectedTrailerPlate("total")}
-              >
-                <strong>Todas as carretas</strong>
-                <span>Visualizar total filtrado</span>
-              </button>
-
-              {modalTrailerPlateOptions.map((placa) => (
-                <button
-                  key={placa}
-                  type="button"
-                  className={`slide3-modal-item ${
-                    draftSelectedTrailerPlate === placa ? "active" : ""
-                  }`}
-                  onClick={() => setDraftSelectedTrailerPlate(placa)}
-                >
-                  <strong>{placa}</strong>
-                  <span>Carreta / Termoking</span>
-                </button>
-              ))}
+                  {modalTrailerPlateOptions.map((item) => (
+                    <button
+                      key={item.placa}
+                      type="button"
+                      className={`slide3-modal-item ${
+                        draftSelectedTrailerPlate === item.placa ? "active" : ""
+                      }`}
+                      onClick={() => setDraftSelectedTrailerPlate(item.placa)}
+                    >
+                      <strong>{item.placa}</strong>
+                      <span>{item.propriedade || "Não informado"}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="slide3-modal-footer">
               <button
                 type="button"
                 className="slide3-modal-secondary"
-                onClick={clearTrailerPlateSelection}
+                onClick={clearPlateSelection}
               >
                 Limpar
               </button>
@@ -1372,9 +1185,9 @@ export default function Slide3() {
               <button
                 type="button"
                 className="slide3-modal-primary"
-                onClick={applyTrailerPlateSelection}
+                onClick={applyPlateSelection}
               >
-                Aplicar
+                Aplicar par
               </button>
             </div>
           </div>

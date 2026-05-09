@@ -806,153 +806,6 @@
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
 }
 
-.slide3-plate-selector-grid {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.slide3-total-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 22px;
-  border-radius: 28px;
-  background: linear-gradient(180deg, #ffffff 0%, #fff7f7 100%);
-  border: 1px solid rgba(153, 27, 27, 0.14);
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
-}
-
-.slide3-total-header {
-  display: grid;
-  grid-template-columns: 1fr 520px;
-  gap: 20px;
-  align-items: start;
-}
-
-.slide3-total-title {
-  margin: 12px 0 0;
-  font-size: 30px;
-  line-height: 1.08;
-  color: #111827;
-  letter-spacing: -0.04em;
-}
-.slide3-total-section {
-  overflow: visible;
-}
-
-.slide3-total-header {
-  grid-template-columns: minmax(0, 1fr) minmax(720px, 820px);
-  align-items: start;
-}
-
-.slide3-total-kpis {
-  grid-template-columns: repeat(3, minmax(210px, 1fr));
-  gap: 14px;
-}
-
-.slide3-total-kpis .slide3-kpi {
-  min-width: 0;
-  padding: 16px 18px;
-}
-
-.slide3-kpi strong {
-  white-space: normal !important;
-  overflow: visible !important;
-  text-overflow: initial !important;
-  word-break: normal !important;
-  line-height: 1.05;
-}
-
-.slide3-total-kpis .slide3-kpi strong {
-  font-size: clamp(18px, 1.25vw, 23px);
-  letter-spacing: -0.045em;
-}
-.slide3-kpi-double {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
-  align-items: center;
-}
-
-.slide3-kpi-double div {
-  min-width: 0;
-}
-
-.slide3-kpi-double div:first-child {
-  padding-right: 18px;
-  border-right: 1px solid rgba(153, 27, 27, 0.18);
-}
-
-.slide3-kpi-double span {
-  margin-bottom: 6px;
-}
-
-.slide3-kpi-double strong {
-  font-size: clamp(20px, 1.6vw, 28px);
-}
-.slide3-total-kpis .slide3-kpi span {
-  font-size: 10px;
-}
-
-.slide3-total-section .slide3-dashboard {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.slide3-total-section .slide3-chart-card {
-  min-height: 345px;
-}
-
-@media (max-width: 1400px) {
-  .slide3-total-header {
-    grid-template-columns: 1fr;
-  }
-
-  .slide3-total-kpis {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 980px) {
-  .slide3-total-section .slide3-dashboard,
-  .slide3-total-kpis {
-    grid-template-columns: 1fr;
-  }
-}
-.slide3-total-subtitle {
-  margin: 8px 0 0;
-  max-width: 720px;
-  color: #475569;
-  font-size: 15px;
-  line-height: 1.45;
-}
-
-.slide3-total-kpis {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.slide3-section-title {
-  margin: 8px 0 -4px;
-  font-size: 28px;
-  line-height: 1.1;
-  color: #111827;
-  letter-spacing: -0.04em;
-}
-.slide3-plate-selector-grid .slide3-open-modal-button {
-  min-height: 64px;
-}
-
-.slide3-plate-selector-grid .slide3-open-modal-button span {
-  font-size: 10px;
-}
-
-.slide3-plate-selector-grid .slide3-open-modal-button strong {
-  font-size: 13px;
-}
-
 .slide3-open-modal-button span {
   display: block;
   color: #64748b;
@@ -1529,43 +1382,7 @@
 /* =========================
    SLIDE 5 — CUSTOS AUXILIARES
 ========================= */
-/* FIX SLIDE 5 — KPIs DO TOPO */
 
-.slide5-kpis {
-  align-items: stretch;
-}
-
-.slide5-kpi {
-  min-height: auto;
-  height: auto;
-  padding: 18px 20px;
-  justify-content: center;
-  gap: 14px;
-}
-
-.slide5-kpi span {
-  margin: 0;
-  line-height: 1.1;
-}
-
-.slide5-kpi strong {
-  display: block;
-  line-height: 1.05;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-@media (max-width: 1280px) {
-  .slide5-kpis {
-    grid-template-columns: repeat(3, minmax(180px, 1fr));
-  }
-}
-
-@media (max-width: 780px) {
-  .slide5-kpis {
-    grid-template-columns: 1fr;
-  }
-}
 .slide5 {
   width: 100%;
   min-height: 100vh;
@@ -3752,5 +3569,98 @@
   .slide10-footer {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+/* =========================
+   AJUSTES SLIDE 3 — PAR MOTORIZADO + CARRETA
+========================= */
+
+.slide3-selected-pair {
+  display: grid !important;
+  gap: 3px;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: unset !important;
+}
+
+.slide3-selected-pair small {
+  display: block;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slide3-modal-pair {
+  width: min(1040px, 100%);
+}
+
+.slide3-modal-search.slide3-modal-search-pair {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.slide3-modal-dual-list {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 18px 28px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.slide3-modal-list-panel {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 22px;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.slide3-modal-list-title {
+  display: block;
+  padding: 14px 16px;
+  color: #7f1d1d;
+  font-size: 13px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.slide3-modal-list-panel .slide3-modal-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-content: start;
+  gap: 10px;
+}
+
+.slide3-modal-list-panel .slide3-modal-item {
+  background: #ffffff;
+}
+
+@media (max-width: 900px) {
+  .slide3-modal-search.slide3-modal-search-pair,
+  .slide3-modal-dual-list {
+    grid-template-columns: 1fr;
+  }
+
+  .slide3-modal-dual-list {
+    overflow-y: auto;
+  }
+
+  .slide3-modal-list-panel {
+    min-height: 260px;
   }
 }

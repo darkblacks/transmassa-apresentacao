@@ -940,7 +940,27 @@ export default function Slide3() {
         </div>
       </header>
 
+      <div className="slide3-kpis">
+        <div className="slide3-kpi">
+          <span>Reais motorizados 2026</span>
+          <strong>{formatCurrency(totals.reais)}</strong>
+        </div>
 
+        <div className="slide3-kpi">
+          <span>Litros motorizados 2026</span>
+          <strong>{formatNumber(totals.litros)}</strong>
+        </div>
+
+        <div className="slide3-kpi">
+          <span>KM motorizados 2026</span>
+          <strong>{formatNumber(totals.km)}</strong>
+        </div>
+
+        <div className="slide3-kpi highlight">
+          <span>R$/KM médio 2026</span>
+          <strong>{formatDecimal(totals.realPorKm)}</strong>
+        </div>
+      </div>
 
       <section className="slide3-total-section">
         <div className="slide3-total-header">
@@ -1005,27 +1025,7 @@ export default function Slide3() {
       </section>
 
       <h2 className="slide3-section-title">Motorizados</h2>
-      <div className="slide3-kpis">
-        <div className="slide3-kpi">
-          <span>Reais motorizados 2026</span>
-          <strong>{formatCurrency(totals.reais)}</strong>
-        </div>
 
-        <div className="slide3-kpi">
-          <span>Litros motorizados 2026</span>
-          <strong>{formatNumber(totals.litros)}</strong>
-        </div>
-
-        <div className="slide3-kpi">
-          <span>KM motorizados 2026</span>
-          <strong>{formatNumber(totals.km)}</strong>
-        </div>
-
-        <div className="slide3-kpi highlight">
-          <span>R$/KM médio 2026</span>
-          <strong>{formatDecimal(totals.realPorKm)}</strong>
-        </div>
-      </div>
       <div className="slide3-dashboard">
         <div className="slide3-chart-card">
           <div className="slide3-chart-header">
@@ -1083,7 +1083,7 @@ export default function Slide3() {
           <div>
             <span className="slide3-tag">Carretas / Termoking</span>
 
-            <h2 className="slide3-trailer-title">Carretas</h2>
+            <h2 className="slide3-trailer-title">Abastecimento das carretas</h2>
           </div>
 
           <div className="slide3-trailer-controls">
@@ -1124,17 +1124,25 @@ export default function Slide3() {
             <strong>{formatNumber(trailerTotals.horas)}</strong>
           </div>
 
-          <div className="slide3-kpi highlight slide3-kpi-double">
-          <div>
+          <div className="slide3-kpi highlight">
             <span>R$/hora médio</span>
             <strong>{formatDecimal(trailerTotals.realPorHora)}</strong>
           </div>
 
-          <div>
+          <div className="slide3-kpi">
             <span>L/h médio</span>
             <strong>{formatDecimal(trailerTotals.litrosPorHora)}</strong>
           </div>
-        </div>
+
+          <div className="slide3-kpi">
+            <span>Placas analisadas</span>
+            <strong>{formatNumber(trailerTotals.placas)}</strong>
+          </div>
+
+          <div className="slide3-kpi">
+            <span>Períodos válidos</span>
+            <strong>{formatNumber(trailerTotals.periodos)}</strong>
+          </div>
         </div>
 
         <div className="slide3-dashboard">

@@ -237,6 +237,9 @@ export default function Slide6() {
   const [detailRows, setDetailRows] = useState<DetailManifestRow[]>([]);
   const [costRows, setCostRows] = useState<ConsolidatedCostRow[]>([]);
   const [auxRows, setAuxRows] = useState<AuxCostRow[]>([]);
+  const [maintenanceRows, setMaintenanceRows] = useState<
+    MaintenanceSupportRow[]
+  >([]);
 
   const [selectedMonth, setSelectedMonth] = useState<MonthFilter>("Total");
   const [ownershipFilter, setOwnershipFilter] =
@@ -249,8 +252,6 @@ export default function Slide6() {
     useState<ServiceChartMetric>("faturamento");
 
   const [servicePrices, setServicePrices] = useState<Record<string, number>>({});
-
-  const [maintenanceRows, setMaintenanceRows] = useState<MaintenanceSupportRow[]>([]);
 
   useEffect(() => {
     async function loadBaseData() {
@@ -285,39 +286,39 @@ export default function Slide6() {
         });
 
       const parsedCostRows: ConsolidatedCostRow[] = consolidatedRawRows
-  .map((row) => {
-    const mes = getMonthName(
-      getValue(row, ["mês", "mes", "competência", "competencia"])
-    );
+        .map((row) => {
+          const mes = getMonthName(
+            getValue(row, ["mês", "mes", "competência", "competencia"])
+          );
 
-    return {
-      mes,
-      placa: String(getValue(row, ["placa", "veiculo", "veículo"])).trim(),
-      dono: String(
-        getValue(row, ["dono", "empresa", "proprietario", "proprietário"])
-      ).trim(),
-      propriedade: String(
-        getValue(row, [
-          "próprio/terceiro",
-          "proprio/terceiro",
-          "propriedade",
-          "tipo frota",
-        ])
-      ).trim(),
-      combustivel: toNumber(
-        getValue(row, ["combustível r$", "combustivel r$"])
-      ),
-      litros: toNumber(
-        getValue(row, [
-          "litros",
-          "litros totais",
-          "combustível litros",
-          "combustivel litros",
-        ])
-      ),
-    };
-  })
-  .filter((row) => row.placa && monthOrder.includes(row.mes));
+          return {
+            mes,
+            placa: String(getValue(row, ["placa", "veiculo", "veículo"])).trim(),
+            dono: String(
+              getValue(row, ["dono", "empresa", "proprietario", "proprietário"])
+            ).trim(),
+            propriedade: String(
+              getValue(row, [
+                "próprio/terceiro",
+                "proprio/terceiro",
+                "propriedade",
+                "tipo frota",
+              ])
+            ).trim(),
+            combustivel: toNumber(
+              getValue(row, ["combustível r$", "combustivel r$"])
+            ),
+            litros: toNumber(
+              getValue(row, [
+                "litros",
+                "litros totais",
+                "combustível litros",
+                "combustivel litros",
+              ])
+            ),
+          };
+        })
+        .filter((row) => row.placa && monthOrder.includes(row.mes));
 
       setCostRows(parsedCostRows);
 
@@ -328,74 +329,7 @@ export default function Slide6() {
           dono: string;
         }
       >();
-        const maintenanceSheetName =
-  workbook.SheetNames.find((name) => {
-    const normalized = normalizeText(name);
-    return normalized.includes("manutencao");
-  }) ?? null;
 
-if (maintenanceSheetName) {
-  const maintenanceSheet = workbook.Sheets[maintenanceSheetName];
-
-  const maintenanceRawRows =
-    XLSX.utils.sheet_to_json<Record<string, unknown>>(maintenanceSheet, {
-      defval: "",
-    });
-
-  const parsedMaintenanceRows: MaintenanceSupportRow[] = maintenanceRawRows
-    .map((row) => {
-      const mes = getMonthName(
-        getValue(row, ["mês", "mes", "competência", "competencia"])
-      );
-
-      const placa = String(
-        getValue(row, ["placa", "veiculo", "veículo"])
-      ).trim();
-
-      const mappedOwnership = ownershipByPlate.get(placa);
-
-      return {
-        mes,
-        placa,
-        propriedade:
-          String(
-            getValue(row, [
-              "próprio/terceiro",
-              "proprio/terceiro",
-              "propriedade",
-              "tipo frota",
-            ])
-          ).trim() ||
-          mappedOwnership?.propriedade ||
-          "Não informado",
-        dono:
-          String(
-            getValue(row, ["dono", "empresa", "proprietario", "proprietário"])
-          ).trim() ||
-          mappedOwnership?.dono ||
-          "Não informado",
-        manutencao: toNumber(
-          getValue(row, [
-            "manutenção r$",
-            "manutencao r$",
-            "manutenção",
-            "manutencao",
-          ])
-        ),
-        kmOficialPlacaMes: toNumber(
-          getValue(row, [
-            "km oficial placa/mês (somável)",
-            "km oficial placa/mes (somavel)",
-            "km oficial placa/mês",
-            "km oficial placa/mes",
-          ])
-        ),
-      };
-    })
-    .filter((row) => row.placa && monthOrder.includes(row.mes));
-
-  setMaintenanceRows(parsedMaintenanceRows);
-}
       parsedCostRows.forEach((row) => {
         if (!ownershipByPlate.has(row.placa)) {
           ownershipByPlate.set(row.placa, {
@@ -404,6 +338,81 @@ if (maintenanceSheetName) {
           });
         }
       });
+
+      const maintenanceSheetName =
+        workbook.SheetNames.find((name) => {
+          const normalized = normalizeText(name);
+          return normalized.includes("manutencao");
+        }) ?? null;
+
+      if (maintenanceSheetName) {
+        const maintenanceSheet = workbook.Sheets[maintenanceSheetName];
+
+        const maintenanceRawRows =
+          XLSX.utils.sheet_to_json<Record<string, unknown>>(maintenanceSheet, {
+            defval: "",
+          });
+
+        const parsedMaintenanceRows: MaintenanceSupportRow[] =
+          maintenanceRawRows
+            .map((row) => {
+              const mes = getMonthName(
+                getValue(row, ["mês", "mes", "competência", "competencia"])
+              );
+
+              const placa = String(
+                getValue(row, ["placa", "veiculo", "veículo"])
+              ).trim();
+
+              const mappedOwnership = ownershipByPlate.get(placa);
+
+              return {
+                mes,
+                placa,
+                propriedade:
+                  String(
+                    getValue(row, [
+                      "próprio/terceiro",
+                      "proprio/terceiro",
+                      "propriedade",
+                      "tipo frota",
+                    ])
+                  ).trim() ||
+                  mappedOwnership?.propriedade ||
+                  "Não informado",
+                dono:
+                  String(
+                    getValue(row, [
+                      "dono",
+                      "empresa",
+                      "proprietario",
+                      "proprietário",
+                    ])
+                  ).trim() ||
+                  mappedOwnership?.dono ||
+                  "Não informado",
+                manutencao: toNumber(
+                  getValue(row, [
+                    "manutenção r$",
+                    "manutencao r$",
+                    "manutenção",
+                    "manutencao",
+                  ])
+                ),
+                kmOficialPlacaMes: toNumber(
+                  getValue(row, [
+                    "km oficial placa/mês (somável)",
+                    "km oficial placa/mes (somavel)",
+                    "km oficial placa/mês",
+                    "km oficial placa/mes",
+                  ])
+                ),
+              };
+            })
+            .filter((row) => row.placa && monthOrder.includes(row.mes));
+
+        setMaintenanceRows(parsedMaintenanceRows);
+      }
 
       const detailRawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
         detailSheet,
@@ -578,24 +587,26 @@ if (maintenanceSheetName) {
       return matchMonth && matchOwnership;
     });
   }, [costRows, selectedMonth, ownershipFilter]);
+
   const filteredMaintenanceRows = useMemo(() => {
-  return maintenanceRows.filter((row) => {
-    const matchMonth =
-      selectedMonth === "Total" ? true : row.mes === selectedMonth;
+    return maintenanceRows.filter((row) => {
+      const matchMonth =
+        selectedMonth === "Total" ? true : row.mes === selectedMonth;
 
-    const ownershipValue = `${row.propriedade} ${row.dono}`;
-    const proprio = isProprio(ownershipValue);
+      const ownershipValue = `${row.propriedade} ${row.dono}`;
+      const proprio = isProprio(ownershipValue);
 
-    const matchOwnership =
-      ownershipFilter === "total"
-        ? true
-        : ownershipFilter === "proprio"
-          ? proprio
-          : !proprio;
+      const matchOwnership =
+        ownershipFilter === "total"
+          ? true
+          : ownershipFilter === "proprio"
+            ? proprio
+            : !proprio;
 
-    return matchMonth && matchOwnership;
-  });
-}, [maintenanceRows, selectedMonth, ownershipFilter]);
+      return matchMonth && matchOwnership;
+    });
+  }, [maintenanceRows, selectedMonth, ownershipFilter]);
+
   const filteredAuxRows = useMemo(() => {
     return auxRows.filter((row) => {
       if (selectedMonth === "Total") return true;
@@ -609,7 +620,6 @@ if (maintenanceSheetName) {
 
     filteredDetailRows.forEach((row) => {
       const service = row.motivo || "Não identificado";
-
       map.set(service, (map.get(service) ?? 0) + row.quantidadeServico);
     });
 
@@ -649,9 +659,9 @@ if (maintenanceSheetName) {
     );
 
     const manutencao = filteredMaintenanceRows.reduce(
-  (sum, row) => sum + row.manutencao,
-  0
-);
+      (sum, row) => sum + row.manutencao,
+      0
+    );
 
     const custosAuxiliares = filteredAuxRows.reduce(
       (sum, row) => sum + row.valor,
@@ -676,6 +686,7 @@ if (maintenanceSheetName) {
   }, [
     filteredDetailRows,
     filteredCostRows,
+    filteredMaintenanceRows,
     filteredAuxRows,
     serviceRows,
     faturamentoTeorico,
@@ -699,6 +710,7 @@ if (maintenanceSheetName) {
 
       const manifestos = countManifestos(monthRows);
       const km = monthRows.reduce((sum, row) => sum + row.km, 0);
+
       const faturamentoTransmassa = monthRows.reduce(
         (sum, row) => sum + row.valorFreteTransmassa,
         0
@@ -741,6 +753,44 @@ if (maintenanceSheetName) {
     });
   }, [detailRows, ownershipFilter, servicePrices]);
 
+  const weightMonthlySummary = useMemo(() => {
+    const visibleMonths =
+      selectedMonth === "Total" ? monthOrder : [selectedMonth];
+
+    return visibleMonths.map((mes) => {
+      const monthRows = detailRows.filter((row) => {
+        const ownershipValue = `${row.propriedade} ${row.dono}`;
+        const proprio = isProprio(ownershipValue);
+
+        const matchOwnership =
+          ownershipFilter === "total"
+            ? true
+            : ownershipFilter === "proprio"
+              ? proprio
+              : !proprio;
+
+        return row.mes === mes && matchOwnership;
+      });
+
+      const pesoTotal = monthRows.reduce((sum, row) => sum + row.kgReal, 0);
+
+      const faturamentoTransmassa = monthRows.reduce(
+        (sum, row) => sum + row.valorFreteTransmassa,
+        0
+      );
+
+      const reaisPorPeso =
+        pesoTotal > 0 ? faturamentoTransmassa / pesoTotal : 0;
+
+      return {
+        mes,
+        pesoTotal,
+        faturamentoTransmassa,
+        reaisPorPeso,
+      };
+    });
+  }, [detailRows, selectedMonth, ownershipFilter]);
+
   const comparisonRows = useMemo(() => {
     return [
       {
@@ -777,74 +827,71 @@ if (maintenanceSheetName) {
   }, [totals]);
 
   const monthlySupportSummary = useMemo(() => {
-  return monthOrder.map((mes) => {
-    const fuelMonthRows = costRows.filter((row) => {
-      const ownershipValue = `${row.propriedade} ${row.dono}`;
-      const proprio = isProprio(ownershipValue);
+    return monthOrder.map((mes) => {
+      const fuelMonthRows = costRows.filter((row) => {
+        const ownershipValue = `${row.propriedade} ${row.dono}`;
+        const proprio = isProprio(ownershipValue);
 
-      const matchOwnership =
-        ownershipFilter === "total"
-          ? true
-          : ownershipFilter === "proprio"
-            ? proprio
-            : !proprio;
+        const matchOwnership =
+          ownershipFilter === "total"
+            ? true
+            : ownershipFilter === "proprio"
+              ? proprio
+              : !proprio;
 
-      return row.mes === mes && matchOwnership;
+        return row.mes === mes && matchOwnership;
+      });
+
+      const maintenanceMonthRows = maintenanceRows.filter((row) => {
+        const ownershipValue = `${row.propriedade} ${row.dono}`;
+        const proprio = isProprio(ownershipValue);
+
+        const matchOwnership =
+          ownershipFilter === "total"
+            ? true
+            : ownershipFilter === "proprio"
+              ? proprio
+              : !proprio;
+
+        return row.mes === mes && matchOwnership;
+      });
+
+      const combustivel = fuelMonthRows.reduce(
+        (sum, row) => sum + row.combustivel,
+        0
+      );
+
+      const litros = fuelMonthRows.reduce((sum, row) => sum + row.litros, 0);
+
+      const combustivelRlitro = litros > 0 ? combustivel / litros : 0;
+
+      const manutencao = maintenanceMonthRows.reduce(
+        (sum, row) => sum + row.manutencao,
+        0
+      );
+
+      const kmOficialPlacaMes = maintenanceMonthRows.reduce(
+        (sum, row) => sum + row.kmOficialPlacaMes,
+        0
+      );
+
+      return {
+        mes,
+        combustivel,
+        litros,
+        combustivelRlitro,
+        manutencao,
+        kmOficialPlacaMes,
+      };
     });
-
-    const maintenanceMonthRows = maintenanceRows.filter((row) => {
-      const ownershipValue = `${row.propriedade} ${row.dono}`;
-      const proprio = isProprio(ownershipValue);
-
-      const matchOwnership =
-        ownershipFilter === "total"
-          ? true
-          : ownershipFilter === "proprio"
-            ? proprio
-            : !proprio;
-
-      return row.mes === mes && matchOwnership;
-    });
-
-    const combustivel = fuelMonthRows.reduce(
-      (sum, row) => sum + row.combustivel,
-      0
-    );
-
-    const litros = fuelMonthRows.reduce(
-      (sum, row) => sum + row.litros,
-      0
-    );
-
-    const combustivelRlitro = litros > 0 ? combustivel / litros : 0;
-
-    const manutencao = maintenanceMonthRows.reduce(
-      (sum, row) => sum + row.manutencao,
-      0
-    );
-
-    const kmOficialPlacaMes = maintenanceMonthRows.reduce(
-      (sum, row) => sum + row.kmOficialPlacaMes,
-      0
-    );
-
-    return {
-      mes,
-      combustivel,
-      litros,
-      combustivelRlitro,
-      manutencao,
-      kmOficialPlacaMes,
-    };
-  });
-}, [costRows, maintenanceRows, ownershipFilter]);
+  }, [costRows, maintenanceRows, ownershipFilter]);
 
   const highlightedFuelMonths = useMemo(() => {
-  return monthlySupportSummary
-    .filter((item) => item.combustivelRlitro > 0)
-    .slice(-2)
-    .map((item) => item.mes);
-}, [monthlySupportSummary]);
+    return monthlySupportSummary
+      .filter((item) => item.combustivelRlitro > 0)
+      .slice(-2)
+      .map((item) => item.mes);
+  }, [monthlySupportSummary]);
 
   const marchSupport = useMemo(() => {
     return monthlySupportSummary.find((item) => item.mes === "Março");
@@ -904,6 +951,93 @@ if (maintenanceSheetName) {
           : {
               color: "rgba(22, 163, 74, 0.10)",
             },
+      },
+    ],
+  };
+
+  const weightChart = {
+    grid: {
+      left: 72,
+      right: 72,
+      top: 42,
+      bottom: 42,
+    },
+    tooltip: {
+      trigger: "axis",
+      formatter: (params: any[]) => {
+        const peso = params.find((item) => item.seriesName === "Peso total");
+        const reaisPeso = params.find((item) => item.seriesName === "R$/Peso");
+
+        return `
+          <strong>${params[0]?.axisValue ?? ""}</strong><br/>
+          Peso total: ${formatNumber(Number(peso?.value ?? 0))} kg<br/>
+          R$/Peso: R$ ${Number(reaisPeso?.value ?? 0).toFixed(2)}
+        `;
+      },
+    },
+    legend: {
+      top: 0,
+      right: 0,
+      textStyle: {
+        color: "#475569",
+        fontWeight: 700,
+      },
+    },
+    xAxis: {
+      type: "category",
+      data: weightMonthlySummary.map((item) => item.mes),
+      axisTick: { show: false },
+    },
+    yAxis: [
+      {
+        type: "value",
+        name: "Peso",
+        axisLabel: {
+          formatter: (value: number) => `${(value / 1000).toFixed(0)}t`,
+        },
+        splitLine: {
+          lineStyle: {
+            color: "#e5e7eb",
+          },
+        },
+      },
+      {
+        type: "value",
+        name: "R$/Peso",
+        axisLabel: {
+          formatter: (value: number) => `R$ ${value.toFixed(2)}`,
+        },
+        splitLine: {
+          show: false,
+        },
+      },
+    ],
+    series: [
+      {
+        name: "Peso total",
+        type: "bar",
+        yAxisIndex: 0,
+        barWidth: 34,
+        data: weightMonthlySummary.map((item) => item.pesoTotal),
+        itemStyle: {
+          color: "#16a34a",
+          borderRadius: [12, 12, 0, 0],
+        },
+      },
+      {
+        name: "R$/Peso",
+        type: "line",
+        yAxisIndex: 1,
+        smooth: true,
+        symbolSize: 9,
+        data: weightMonthlySummary.map((item) => item.reaisPorPeso),
+        lineStyle: {
+          width: 4,
+          color: "#b01625",
+        },
+        itemStyle: {
+          color: "#b01625",
+        },
       },
     ],
   };
@@ -1281,7 +1415,7 @@ if (maintenanceSheetName) {
 
           <div className="slide6-service-table">
             <div className="slide6-service-row header">
-              <span>Seviço</span>
+              <span>Serviço</span>
               <span>Qtde</span>
               <span>Preço unit.</span>
               <span>Total</span>
@@ -1334,7 +1468,6 @@ if (maintenanceSheetName) {
               <option value="faturamentoTransmassa">
                 Faturamento Transmassa 2026
               </option>
-              <option value="manifestos">Manifestos</option>
               <option value="servicos">Serviços</option>
               <option value="km">KM total</option>
             </select>
@@ -1347,6 +1480,32 @@ if (maintenanceSheetName) {
               height: 320,
             }}
           />
+
+          <div
+            style={{
+              marginTop: 22,
+              paddingTop: 18,
+              borderTop: "1px solid #e5e7eb",
+            }}
+          >
+            <div className="slide6-chart-header">
+              <div>
+                <strong>Peso total x R$/Peso</strong>
+                <span>
+                  Peso transportado e relação entre faturamento Transmassa e
+                  peso real.
+                </span>
+              </div>
+            </div>
+
+            <ReactECharts
+              option={weightChart}
+              style={{
+                width: "100%",
+                height: 280,
+              }}
+            />
+          </div>
         </div>
       </div>
 
@@ -1418,11 +1577,31 @@ if (maintenanceSheetName) {
 
             <div className="slide6-support-text">
               <strong>Combustível</strong>
+
               <span>
-                Se você notar o salto no gráfico entre março e abril, fica claro que o custo da sua operação sofreu um golpe direto por conta da instabilidade lá fora. O que está acontecendo é que os conflitos nos países árabes mexem com o fornecimento global de petróleo, e a resposta imediata dos Estados Unidos a essa tensão acaba travando o mercado. Como o dólar e o preço do barril são os pilares que sustentam o nosso combustível aqui no Brasil, qualquer movimento mais agressivo nessa região chega muito rápido na bomba.
-</span><span>
-O ponto principal para a sua gestão é entender que esse pico reflete uma antecipação de escassez. Quando os EUA e os países árabes entram em rota de colisão, o mercado global entra em alerta e o preço dispara preventivamente. Por isso, esses meses de março e abril aparecem tão destacados: não é apenas uma variação de rotina, mas o reflexo de que o custo para movimentar a frota está sendo ditado por uma crise que foge do controle interno e exige um planejamento de caixa muito mais rígido para absorver essa volatilidade.
-          </span>    
+                Se você notar o salto no gráfico entre março e abril, fica claro
+                que o custo da sua operação sofreu um golpe direto por conta da
+                instabilidade lá fora. O que está acontecendo é que os conflitos
+                nos países árabes mexem com o fornecimento global de petróleo, e
+                a resposta imediata dos Estados Unidos a essa tensão acaba
+                travando o mercado. Como o dólar e o preço do barril são os
+                pilares que sustentam o nosso combustível aqui no Brasil,
+                qualquer movimento mais agressivo nessa região chega muito
+                rápido na bomba.
+              </span>
+
+              <span>
+                O ponto principal para a sua gestão é entender que esse pico
+                reflete uma antecipação de escassez. Quando os EUA e os países
+                árabes entram em rota de colisão, o mercado global entra em
+                alerta e o preço dispara preventivamente. Por isso, esses meses
+                de março e abril aparecem tão destacados: não é apenas uma
+                variação de rotina, mas o reflexo de que o custo para movimentar
+                a frota está sendo ditado por uma crise que foge do controle
+                interno e exige um planejamento de caixa muito mais rígido para
+                absorver essa volatilidade.
+              </span>
+
               <p>
                 O gráfico ao lado mostra a evolução de <b>R$/L</b> no
                 combustível e destaca os meses mais recentes disponíveis na
@@ -1446,9 +1625,16 @@ O ponto principal para a sua gestão é entender que esse pico reflete uma antec
 
             <div className="slide6-support-text">
               <strong>Manutenção</strong>
+
               <span>
-                Se você observar o gráfico, verá uma subida acentuada no custo de manutenção, mas é fundamental notar que esse valor acompanha exatamente o salto na quilometragem rodada pela nossa frota no mesmo período. Na prática, isso mostra que o aumento não foi causado por quebras inesperadas ou má qualidade das peças, mas sim por uma operação muito mais intensa.
+                Se você observar o gráfico, verá uma subida acentuada no custo
+                de manutenção, mas é fundamental notar que esse valor acompanha
+                exatamente o salto na quilometragem rodada pela nossa frota no
+                mesmo período. Na prática, isso mostra que o aumento não foi
+                causado por quebras inesperadas ou má qualidade das peças, mas
+                sim por uma operação muito mais intensa.
               </span>
+
               <p>
                 O gráfico compara a evolução mensal de <b>Manutenção R$</b> com
                 <b> KM Oficial Placa/Mês</b>, destacando março para justificar a
