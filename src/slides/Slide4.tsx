@@ -288,16 +288,22 @@ function makeRankingChart(data: RankingItem[], title: string, color = "#b01625")
 export default function Slide4() {
   const [rows, setRows] = useState<MaintenanceRow[]>([]);
   const [filter, setFilter] = useState<FilterType>("total");
+
   const [selectedOwner, setSelectedOwner] = useState("total");
-  const [selectedPlate, setSelectedPlate] = useState("total");
+  const [selectedMotorizedPlate, setSelectedMotorizedPlate] = useState("total");
+  const [selectedTrailerPlate, setSelectedTrailerPlate] = useState("total");
+
   const [selectedRankingMonth, setSelectedRankingMonth] =
     useState<MonthFilter>("todos");
   const [sortType, setSortType] = useState<SortType>("desc");
 
-  const [isPlateModalOpen, setIsPlateModalOpen] = useState(false);
+  const [isMotorizedPlateModalOpen, setIsMotorizedPlateModalOpen] = useState(false);
+  const [isTrailerPlateModalOpen, setIsTrailerPlateModalOpen] = useState(false);
+
   const [draftPlateSearch, setDraftPlateSearch] = useState("");
   const [draftSelectedOwner, setDraftSelectedOwner] = useState("total");
-  const [draftSelectedPlate, setDraftSelectedPlate] = useState("total");
+  const [draftSelectedMotorizedPlate, setDraftSelectedMotorizedPlate] = useState("total");
+  const [draftSelectedTrailerPlate, setDraftSelectedTrailerPlate] = useState("total");
 
   useEffect(() => {
     async function loadData() {
@@ -365,19 +371,42 @@ export default function Slide4() {
     loadData();
   }, []);
 
-  const plateOptions = useMemo(() => {
+  const motorizedPlateOptions = useMemo(() => {
     const map = new Map<string, PlateOption>();
 
-    rows.forEach((row) => {
-      if (!map.has(row.placa)) {
-        map.set(row.placa, {
-          placa: row.placa,
-          dono: row.dono || "Não informado",
-          propriedade: row.propriedade || "Não informado",
-          tipoFrota: row.tipoFrota,
-        });
-      }
-    });
+    rows
+      .filter((row) => row.tipoFrota === "Motorizado")
+      .forEach((row) => {
+        if (!map.has(row.placa)) {
+          map.set(row.placa, {
+            placa: row.placa,
+            dono: row.dono || "Não informado",
+            propriedade: row.propriedade || "Não informado",
+            tipoFrota: row.tipoFrota,
+          });
+        }
+      });
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.placa.localeCompare(b.placa)
+    );
+  }, [rows]);
+
+  const trailerPlateOptions = useMemo(() => {
+    const map = new Map<string, PlateOption>();
+
+    rows
+      .filter((row) => row.tipoFrota === "Carreta")
+      .forEach((row) => {
+        if (!map.has(row.placa)) {
+          map.set(row.placa, {
+            placa: row.placa,
+            dono: row.dono || "Não informado",
+            propriedade: row.propriedade || "Não informado",
+            tipoFrota: row.tipoFrota,
+          });
+        }
+      });
 
     return Array.from(map.values()).sort((a, b) =>
       a.placa.localeCompare(b.placa)
@@ -386,16 +415,19 @@ export default function Slide4() {
 
   const ownerOptions = useMemo(() => {
     const owners = rows
+      .filter((row) => row.tipoFrota === "Motorizado")
       .map((row) => row.dono || "Não informado")
       .filter(Boolean);
 
     return Array.from(new Set(owners)).sort();
   }, [rows]);
 
-  const modalPlateOptions = useMemo(() => {
-    return plateOptions.filter((item) => {
+  const modalMotorizedPlateOptions = useMemo(() => {
+    return motorizedPlateOptions.filter((item) => {
       const matchOwner =
-        draftSelectedOwner === "total" ? true : item.dono === draftSelectedOwner;
+        draftSelectedOwner === "total"
+          ? true
+          : item.dono === draftSelectedOwner;
 
       const matchPlate = draftPlateSearch
         ? normalizeText(item.placa).includes(normalizeText(draftPlateSearch))
@@ -403,34 +435,61 @@ export default function Slide4() {
 
       return matchOwner && matchPlate;
     });
-  }, [plateOptions, draftSelectedOwner, draftPlateSearch]);
+  }, [motorizedPlateOptions, draftSelectedOwner, draftPlateSearch]);
 
-  function openPlateModal() {
+  const modalTrailerPlateOptions = useMemo(() => {
+    return trailerPlateOptions.filter((item) => {
+      const matchPlate = draftPlateSearch
+        ? normalizeText(item.placa).includes(normalizeText(draftPlateSearch))
+        : true;
+
+      return matchPlate;
+    });
+  }, [trailerPlateOptions, draftPlateSearch]);
+
+  function openMotorizedPlateModal() {
     setDraftSelectedOwner(selectedOwner);
-    setDraftSelectedPlate(selectedPlate);
+    setDraftSelectedMotorizedPlate(selectedMotorizedPlate);
     setDraftPlateSearch("");
-    setIsPlateModalOpen(true);
+    setIsMotorizedPlateModalOpen(true);
   }
 
-  function applyPlateSelection() {
+  function openTrailerPlateModal() {
+    setDraftSelectedTrailerPlate(selectedTrailerPlate);
+    setDraftPlateSearch("");
+    setIsTrailerPlateModalOpen(true);
+  }
+
+  function applyMotorizedPlateSelection() {
     setSelectedOwner(draftSelectedOwner);
-    setSelectedPlate(draftSelectedPlate);
-    setIsPlateModalOpen(false);
+    setSelectedMotorizedPlate(draftSelectedMotorizedPlate);
+    setIsMotorizedPlateModalOpen(false);
   }
 
-  function clearPlateSelection() {
+  function applyTrailerPlateSelection() {
+    setSelectedTrailerPlate(draftSelectedTrailerPlate);
+    setIsTrailerPlateModalOpen(false);
+  }
+
+  function clearMotorizedPlateSelection() {
     setDraftSelectedOwner("total");
-    setDraftSelectedPlate("total");
-    setDraftPlateSearch("");
+    setDraftSelectedMotorizedPlate("total");
     setSelectedOwner("total");
-    setSelectedPlate("total");
-    setIsPlateModalOpen(false);
+    setSelectedMotorizedPlate("total");
+    setIsMotorizedPlateModalOpen(false);
+  }
+
+  function clearTrailerPlateSelection() {
+    setDraftSelectedTrailerPlate("total");
+    setSelectedTrailerPlate("total");
+    setIsTrailerPlateModalOpen(false);
   }
 
   function clearAllFilters() {
     setFilter("total");
     setSelectedOwner("total");
-    setSelectedPlate("total");
+    setSelectedMotorizedPlate("total");
+    setSelectedTrailerPlate("total");
     setSelectedRankingMonth("todos");
     setSortType("desc");
   }
@@ -447,14 +506,34 @@ export default function Slide4() {
             : !rowIsProprio;
 
       const matchOwner =
-        selectedOwner === "total" ? true : row.dono === selectedOwner;
+        row.tipoFrota === "Motorizado"
+          ? selectedOwner === "total" || row.dono === selectedOwner
+          : true;
 
-      const matchPlate =
-        selectedPlate === "total" ? true : row.placa === selectedPlate;
+      const matchMotorizedPlate =
+        row.tipoFrota === "Motorizado"
+          ? selectedMotorizedPlate === "total" || row.placa === selectedMotorizedPlate
+          : true;
 
-      return matchOwnership && matchOwner && matchPlate;
+      const matchTrailerPlate =
+        row.tipoFrota === "Carreta"
+          ? selectedTrailerPlate === "total" || row.placa === selectedTrailerPlate
+          : true;
+
+      return (
+        matchOwnership &&
+        matchOwner &&
+        matchMotorizedPlate &&
+        matchTrailerPlate
+      );
     });
-  }, [rows, filter, selectedOwner, selectedPlate]);
+  }, [
+    rows,
+    filter,
+    selectedOwner,
+    selectedMotorizedPlate,
+    selectedTrailerPlate,
+  ]);
 
   const sectionTotals = useMemo(() => {
     const totalRows = filteredRows;
@@ -552,18 +631,35 @@ export default function Slide4() {
         </div>
 
         <div className="slide3-controls slide4-controls">
-          <button
-            type="button"
-            className="slide3-open-modal-button"
-            onClick={openPlateModal}
-          >
-            <span>Placa / Dono selecionado</span>
+          <div className="slide3-plate-selector-grid">
+            <button
+              type="button"
+              className="slide3-open-modal-button"
+              onClick={openMotorizedPlateModal}
+            >
+              <span>Placa Motorizado</span>
 
-            <strong>
-              {selectedOwner === "total" ? "Todas as frotas" : selectedOwner}
-              {selectedPlate !== "total" ? ` · ${selectedPlate}` : ""}
-            </strong>
-          </button>
+              <strong>
+                {selectedMotorizedPlate === "total"
+                  ? "Motorizado selecionado"
+                  : selectedMotorizedPlate}
+              </strong>
+            </button>
+
+            <button
+              type="button"
+              className="slide3-open-modal-button"
+              onClick={openTrailerPlateModal}
+            >
+              <span>Placa Carreta</span>
+
+              <strong>
+                {selectedTrailerPlate === "total"
+                  ? "Carreta selecionada"
+                  : selectedTrailerPlate}
+              </strong>
+            </button>
+          </div>
 
           <div className="slide3-filter slide4-filter">
             <button
@@ -840,19 +936,19 @@ export default function Slide4() {
         </span>
       </footer>
 
-      {isPlateModalOpen && (
+      {isMotorizedPlateModalOpen && (
         <div className="slide3-modal-backdrop">
           <div className="slide3-modal">
             <div className="slide3-modal-header">
               <div>
-                <strong>Selecionar placa</strong>
-                <span>Filtre por dono/frota e escolha uma placa específica.</span>
+                <strong>Selecionar motorizado</strong>
+                <span>Filtre por dono/frota e escolha uma placa motorizada.</span>
               </div>
 
               <button
                 type="button"
                 className="slide3-modal-close"
-                onClick={() => setIsPlateModalOpen(false)}
+                onClick={() => setIsMotorizedPlateModalOpen(false)}
               >
                 ×
               </button>
@@ -866,7 +962,7 @@ export default function Slide4() {
                   value={draftSelectedOwner}
                   onChange={(event) => {
                     setDraftSelectedOwner(event.target.value);
-                    setDraftSelectedPlate("total");
+                    setDraftSelectedMotorizedPlate("total");
                   }}
                 >
                   <option value="total">Todas as frotas</option>
@@ -880,7 +976,7 @@ export default function Slide4() {
               </label>
 
               <label>
-                Placa
+                Placa Motorizado
 
                 <input
                   value={draftPlateSearch}
@@ -894,22 +990,22 @@ export default function Slide4() {
               <button
                 type="button"
                 className={`slide3-modal-item ${
-                  draftSelectedPlate === "total" ? "active" : ""
+                  draftSelectedMotorizedPlate === "total" ? "active" : ""
                 }`}
-                onClick={() => setDraftSelectedPlate("total")}
+                onClick={() => setDraftSelectedMotorizedPlate("total")}
               >
-                <strong>Todas as placas</strong>
+                <strong>Todos os motorizados</strong>
                 <span>Visualizar total filtrado</span>
               </button>
 
-              {modalPlateOptions.map((item) => (
+              {modalMotorizedPlateOptions.map((item) => (
                 <button
                   key={`${item.tipoFrota}-${item.placa}`}
                   type="button"
                   className={`slide3-modal-item ${
-                    draftSelectedPlate === item.placa ? "active" : ""
+                    draftSelectedMotorizedPlate === item.placa ? "active" : ""
                   }`}
-                  onClick={() => setDraftSelectedPlate(item.placa)}
+                  onClick={() => setDraftSelectedMotorizedPlate(item.placa)}
                 >
                   <strong>{item.placa}</strong>
 
@@ -924,7 +1020,7 @@ export default function Slide4() {
               <button
                 type="button"
                 className="slide3-modal-secondary"
-                onClick={clearPlateSelection}
+                onClick={clearMotorizedPlateSelection}
               >
                 Limpar
               </button>
@@ -932,7 +1028,88 @@ export default function Slide4() {
               <button
                 type="button"
                 className="slide3-modal-primary"
-                onClick={applyPlateSelection}
+                onClick={applyMotorizedPlateSelection}
+              >
+                Aplicar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isTrailerPlateModalOpen && (
+        <div className="slide3-modal-backdrop">
+          <div className="slide3-modal">
+            <div className="slide3-modal-header">
+              <div>
+                <strong>Selecionar carreta</strong>
+                <span>Escolha uma placa de carreta.</span>
+              </div>
+
+              <button
+                type="button"
+                className="slide3-modal-close"
+                onClick={() => setIsTrailerPlateModalOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="slide3-modal-search">
+              <label>
+                Placa Carreta
+
+                <input
+                  value={draftPlateSearch}
+                  onChange={(event) => setDraftPlateSearch(event.target.value)}
+                  placeholder="Ex: ABC1D23..."
+                />
+              </label>
+            </div>
+
+            <div className="slide3-modal-list">
+              <button
+                type="button"
+                className={`slide3-modal-item ${
+                  draftSelectedTrailerPlate === "total" ? "active" : ""
+                }`}
+                onClick={() => setDraftSelectedTrailerPlate("total")}
+              >
+                <strong>Todas as carretas</strong>
+                <span>Visualizar total filtrado</span>
+              </button>
+
+              {modalTrailerPlateOptions.map((item) => (
+                <button
+                  key={`${item.tipoFrota}-${item.placa}`}
+                  type="button"
+                  className={`slide3-modal-item ${
+                    draftSelectedTrailerPlate === item.placa ? "active" : ""
+                  }`}
+                  onClick={() => setDraftSelectedTrailerPlate(item.placa)}
+                >
+                  <strong>{item.placa}</strong>
+
+                  <span>
+                    {item.tipoFrota} · {item.propriedade} · {item.dono}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="slide3-modal-footer">
+              <button
+                type="button"
+                className="slide3-modal-secondary"
+                onClick={clearTrailerPlateSelection}
+              >
+                Limpar
+              </button>
+
+              <button
+                type="button"
+                className="slide3-modal-primary"
+                onClick={applyTrailerPlateSelection}
               >
                 Aplicar
               </button>

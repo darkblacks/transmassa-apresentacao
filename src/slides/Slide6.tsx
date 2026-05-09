@@ -1644,7 +1644,7 @@ export default function Slide6() {
           </div>
         </div>
       </div>
-
+                
       <footer className="slide6-final-note">
         A frota precisa ser avaliada pelo equilíbrio entre o que movimenta, o
         que custa e o que pode gerar de faturamento.
