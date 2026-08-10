@@ -1,160 +1,148 @@
 import {
-  Database,
-  FileCheck2,
-  Workflow,
-  LockKeyhole,
-  Brain,
-  Target,
-  Smartphone,
+  BadgeCheck,
+  BarChart3,
+  ClipboardCheck,
+  DatabaseZap,
+  Handshake,
+  Route,
+  ShieldCheck,
+  Truck,
 } from "lucide-react";
 
-const pyramidItems = [
+import DeckStyles from "./DeckStyles";
+import { deckInfo } from "./SlideData";
+
+const closingPoints = [
   {
-    level: "01",
-    title: "Dados",
-    text: "Registros brutos da operação: abastecimentos, manifestos, períodos, hodômetros, manutenção e custos.",
+    icon: <BarChart3 size={22} />,
+    title: "Fechamento mensal",
+    text: "Criar uma rotina recorrente para acompanhar combustível, KM, manutenção e ofensores.",
   },
   {
-    level: "02",
-    title: "Informação",
-    text: "Dados organizados por placa, mês, motorista, serviço, KM, custo e faturamento.",
+    icon: <DatabaseZap size={22} />,
+    title: "Dados mais confiáveis",
+    text: "Reduzir inconsistências na origem para evitar retrabalho e decisões distorcidas.",
   },
   {
-    level: "03",
-    title: "Conhecimento",
-    text: "Leitura gerencial: quais veículos custam mais, quais movimentam mais e onde existem desvios.",
+    icon: <Truck size={22} />,
+    title: "Gestão da frota",
+    text: "Comparar custo, utilização e desempenho por mês, placa e tipo de veículo.",
   },
   {
-    level: "04",
-    title: "Sabedoria",
-    text: "Tomada de decisão: reduzir custos, melhorar processos, corrigir falhas e aumentar eficiência.",
+    icon: <ShieldCheck size={22} />,
+    title: "Próxima evolução",
+    text: "Transformar o fechamento em rotina de processo, com responsáveis e validações claras.",
   },
 ];
 
-const solutionItems = [
-  {
-    icon: <Workflow size={22} />,
-    title: "Padronização de processos",
-    text: "Definir regras claras para lançamento de manifestos, abastecimentos, hodômetros, manutenção e tipos de serviço.",
-  },
-  {
-    icon: <FileCheck2 size={22} />,
-    title: "Validação na origem",
-    text: "Evitar que dados inconsistentes sejam lançados, como hodômetro menor, KM zero indevido ou motivo sem preenchimento.",
-  },
-  {
-    icon: <LockKeyhole size={22} />,
-    title: "Sistemas com travas inteligentes",
-    text: "Usar ferramentas que obriguem o preenchimento correto e impeçam erros operacionais antes que cheguem ao fechamento.",
-  },
-  {
-    icon: <Target size={22} />,
-    title: "Indicadores mensais recorrentes",
-    text: "Criar rotina de fechamento para acompanhar custos, produtividade, faturamento e qualidade dos dados mês a mês.",
-  },
+const nextSteps = [
+  "Validar os indicadores apresentados neste fechamento.",
+  "Criar rotina de conferência mensal das bases antes da apresentação.",
+  "Selecionar caminhões ofensores para análise de venda, substituição ou plano de manutenção.",
+  "Padronizar cadastro de frota, hodômetro, motorista e fechamento de OS.",
+  "Acompanhar a evolução mês a mês com foco em custo por KM e qualidade do dado.",
 ];
 
 export default function Slide8() {
   return (
-    <section className="slide slide8">
-      <header className="slide8-header">
+    <section className="slide slide10 tm-red-slide">
+      <DeckStyles />
+      <div className="slide10-hero">
+        <div className="slide10-logos">
+          <div className="slide10-logo-card">
+            <img src="/assets/logotransmassa.png" alt="Transmassa" />
+          </div>
+        </div>
+
+        <span className="slide10-tag">Encerramento</span>
+
+        <h1 className="slide10-title">
+          Obrigado.
+          <br />
+          Próximo passo: transformar análise em gestão.
+        </h1>
+
+        <p className="slide10-subtitle">
+          O fechamento mostrou que a Transmassa já possui dados operacionais
+          relevantes. Agora, o desafio é transformar esses dados em uma rotina
+          de controle mais confiável, padronizada e útil para decisão.
+        </p>
+      </div>
+
+      <div className="slide10-main-grid">
+        <div className="slide10-card">
+          <div className="slide10-section-header">
+            <strong>O que este fechamento entregou</strong>
+            <span>Resumo da visão construída para a frota</span>
+          </div>
+
+          <div className="slide10-points-grid">
+            {closingPoints.map((item) => (
+              <div className="slide10-point-card" key={item.title}>
+                <div className="slide10-icon">{item.icon}</div>
+                <div>
+                  <strong>{item.title}</strong>
+                  <p>{item.text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="slide10-card highlight">
+          <div className="slide10-section-header">
+            <strong>Próximos passos sugeridos</strong>
+            <span>Plano prático para evoluir após a apresentação</span>
+          </div>
+
+          <div className="slide10-steps">
+            {nextSteps.map((item, index) => (
+              <div className="slide10-step" key={item}>
+                <div className="slide10-step-number">
+                  {String(index + 1).padStart(2, "0")}
+                </div>
+                <p>{item}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="slide10-bottom-grid">
+        <div className="slide10-message-card">
+          <Handshake size={30} />
+          <div>
+            <strong>Mensagem final</strong>
+            <p>
+              A proposta não é apenas criar mais um relatório, mas construir
+              uma rotina de gestão onde a frota seja acompanhada pelo equilíbrio
+              entre movimentação, custo e confiabilidade do dado.
+            </p>
+          </div>
+        </div>
+
+        <div className="slide10-message-card action">
+          <ClipboardCheck size={30} />
+          <div>
+            <strong>Recomendação</strong>
+            <p>
+              Começar pela qualidade da base e pelos ofensores. Assim, a evolução
+              acontece com evidência, prioridade e menor risco operacional.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <footer className="slide10-footer">
         <div>
-          <span className="slide8-tag">Plano de evolução</span>
-
-          <h1 className="slide8-title">
-            Transformar dados operacionais em decisão gerencial
-          </h1>
-
-          <p className="slide8-subtitle">
-            O fechamento mostrou que a empresa já possui muitos registros da
-            operação. O próximo passo é melhorar a forma como esses dados são
-            coletados, validados e transformados em informação confiável.
-          </p>
+          <BadgeCheck size={18} />
+          <span>Fechamento Frota Transmassa · {deckInfo.period}</span>
         </div>
 
-        <div className="slide8-header-card">
-          <Database size={26} />
-          <strong>Problema central</strong>
-          <p>
-            Hoje, parte do esforço analítico é gasto corrigindo, interpretando e
-            ajustando dados que poderiam nascer mais organizados na operação.
-          </p>
+        <div>
+          <Route size={18} />
+          <span>Controle · Dados · Gestão · Evolução</span>
         </div>
-      </header>
-
-      <div className="slide8-main-grid">
-        <div className="slide8-pyramid-card">
-          <div className="slide8-section-header">
-            <strong>Pirâmide DICS</strong>
-            <span>Dados → Informação → Conhecimento → Sabedoria</span>
-          </div>
-
-          <div className="slide8-pyramid">
-            {pyramidItems.map((item) => (
-              <div className="slide8-pyramid-item" key={item.level}>
-                <div className="slide8-pyramid-level">{item.level}</div>
-
-                <div>
-                  <strong>{item.title}</strong>
-                  <p>{item.text}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="slide8-solution-card">
-          <div className="slide8-section-header">
-            <strong>Soluções possíveis</strong>
-            <span>Como reduzir retrabalho e aumentar confiabilidade</span>
-          </div>
-
-          <div className="slide8-solutions">
-            {solutionItems.map((item) => (
-              <div className="slide8-solution-item" key={item.title}>
-                <div className="slide8-solution-icon">{item.icon}</div>
-
-                <div>
-                  <strong>{item.title}</strong>
-                  <p>{item.text}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="slide8-bottom-grid">
-        <div className="slide8-critical-box">
-          <Brain size={24} />
-
-          <div>
-            <strong>Leitura gerencial</strong>
-            <p>
-              Não basta ter dados. Para que a frota seja gerida com precisão, é
-              necessário garantir que o dado nasça correto, siga um padrão e
-              possa ser usado sem depender de correções manuais constantes.
-            </p>
-          </div>
-        </div>
-
-        <div className="slide8-next-box">
-          <Smartphone size={24} />
-
-          <div>
-            <strong>Gancho para a próxima etapa</strong>
-            <p>
-              Uma das primeiras soluções práticas é evoluir o processo de
-              abastecimento por meio de um aplicativo com campos obrigatórios,
-              validações, fotos e padronização da coleta de dados.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <footer className="slide8-footer-note">
-        O objetivo não é apenas criar relatórios melhores, mas construir uma
-        operação onde cada lançamento já contribua para uma decisão mais segura.
       </footer>
     </section>
   );

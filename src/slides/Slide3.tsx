@@ -1,40 +1,57 @@
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import ReactECharts from "echarts-for-react";
+import { Fuel, Gauge, MapPin, RefreshCcw, Route, TrendingUp } from "lucide-react";
+import DeckStyles from "./DeckStyles";
 
-type FilterType = "total" | "proprio" | "terceiro";
-type EfficiencyMetric = "kmPorLitro" | "realPorLitro" | "realPorKm";
-type TotalMetric = "reais" | "litros" | "km";
+const FILE_PATH = "/data/Base_Manutencao_Frota_Transmassa_2026.xlsx";
 
-type TrailerEfficiencyMetric = "litrosPorHora" | "realPorHora";
-type TrailerTotalMetric = "reais" | "litros" | "horas";
+type PeriodKey = "Todos" | string;
+type MetricKey = "reais" | "litros" | "km";
+type StationMetric = "reais" | "litros";
+
+type SummaryRow = {
+  mes: string;
+  total: number;
+  litros: number;
+  preco: number;
+  km: number;
+  kml: number;
+  rskm: number;
+  registros: number;
+  ok: number;
+};
 
 type FuelRow = {
   placa: string;
   mes: string;
   propriedade: string;
+  tipo: string;
+  cavaloBau: string;
+  posto: string;
+  motorista: string;
+  combustivel: string;
   reais: number;
   litros: number;
   km: number;
+  kml: number;
+  rsl: number;
+  rskm: number;
+  obs: string;
+  abastecimentos: number;
 };
 
-type TrailerFuelRow = {
-  placa: string;
-  mes: string;
-  propriedade: string;
-  reais: number;
-  litros: number;
-  horas: number;
-  litrosPorHora: number;
-  realPorHora: number;
-  qualidade: string;
-  filtro: string;
-};
+const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
-const FILE_PATH = "/data/Base_Consolidada_Placa_Mes_Transmassa_Cavalos_2026.xlsx";
-const TRAILER_FILE_PATH = "/data/Combustivel_Carretas_Termoking_Transmassa_2026.xlsx";
+function monthLabel(monthKey: string) {
+  const match = monthKey.match(/^(20\d{2})-(\d{2})$/);
+  if (!match) return monthKey;
 
-const monthOrder = ["Janeiro", "Fevereiro", "Março", "Abril"];
+  const year = match[1];
+  const month = Number(match[2]);
+  const label = monthNames[month - 1];
+  return label ? `${label}/${year.slice(-2)}` : monthKey;
+}
 
 function normalizeText(value: unknown) {
   return String(value ?? "")
@@ -45,9 +62,12 @@ function normalizeText(value: unknown) {
 }
 
 function toNumber(value: unknown) {
-  if (typeof value === "number") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
 
-  const cleaned = String(value ?? "")
+  const raw = String(value ?? "").trim();
+  if (!raw) return 0;
+
+  const cleaned = raw
     .replace(/[R$\s]/g, "")
     .replace(/\./g, "")
     .replace(",", ".");
@@ -57,9 +77,14 @@ function toNumber(value: unknown) {
 }
 
 function findColumn(row: Record<string, unknown>, aliases: string[]) {
-  return Object.keys(row).find((key) =>
-    aliases.some((alias) => normalizeText(key).includes(normalizeText(alias)))
-  );
+  const keys = Object.keys(row || {});
+  return keys.find((key) => {
+    const normalizedKey = normalizeText(key).replace(/[^a-z0-9]+/g, " ");
+    return aliases.some((alias) => {
+      const normalizedAlias = normalizeText(alias).replace(/[^a-z0-9]+/g, " ");
+      return normalizedKey === normalizedAlias || normalizedKey.includes(normalizedAlias);
+    });
+  });
 }
 
 function getValue(row: Record<string, unknown>, aliases: string[]) {
@@ -67,1319 +92,579 @@ function getValue(row: Record<string, unknown>, aliases: string[]) {
   return key ? row[key] : "";
 }
 
-function excelDateToMonthName(value: number) {
+function excelDateToDate(value: number) {
   const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-  const date = new Date(excelEpoch.getTime() + value * 86400000);
-  const monthIndex = date.getUTCMonth();
-
-  return monthOrder[monthIndex] ?? String(value);
+  return new Date(excelEpoch.getTime() + value * 86400000);
 }
 
-function getMonthName(value: unknown) {
+function toMonthKey(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {
-    return excelDateToMonthName(value);
+    const date = excelDateToDate(value);
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
   }
 
-  const text = normalizeText(value);
+  const raw = String(value ?? "").trim();
+  const text = normalizeText(raw);
 
-  if (text.includes("jan") || text.includes("01/2026") || text.includes("2026-01")) return "Janeiro";
-  if (text.includes("fev") || text.includes("02/2026") || text.includes("2026-02")) return "Fevereiro";
-  if (text.includes("mar") || text.includes("03/2026") || text.includes("2026-03")) return "Março";
-  if (text.includes("abr") || text.includes("04/2026") || text.includes("2026-04")) return "Abril";
+  const iso = raw.match(/(20\d{2})[-/](\d{1,2})/);
+  if (iso) return `${iso[1]}-${String(Number(iso[2])).padStart(2, "0")}`;
 
-  return String(value ?? "");
+  const br = raw.match(/(\d{1,2})[/-](\d{1,2})[/-](20\d{2})/);
+  if (br) return `${br[3]}-${String(Number(br[2])).padStart(2, "0")}`;
+
+  if (text.includes("jan")) return "2026-01";
+  if (text.includes("fev")) return "2026-02";
+  if (text.includes("mar")) return "2026-03";
+  if (text.includes("abr")) return "2026-04";
+  if (text.includes("mai")) return "2026-05";
+  if (text.includes("jun")) return "2026-06";
+  if (text.includes("jul")) return "2026-07";
+  if (text.includes("ago")) return "2026-08";
+  if (text.includes("set")) return "2026-09";
+  if (text.includes("out")) return "2026-10";
+  if (text.includes("nov")) return "2026-11";
+  if (text.includes("dez")) return "2026-12";
+
+  return raw;
 }
 
-function isProprio(value: string) {
-  const text = normalizeText(value);
-
-  return (
-    text.includes("proprio") ||
-    text.includes("próprio") ||
-    text.includes("transmassa") ||
-    text.includes("alx")
-  );
-}
-
-function isFalseFilter(value: unknown) {
-  const text = normalizeText(value);
-
-  return (
-    text === "falso" ||
-    text === "false" ||
-    text === "0" ||
-    text === "nao" ||
-    text === "não"
-  );
-}
-
-function formatCurrency(value: number) {
+function fmtBRL(value: number) {
   return value.toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: value >= 100000 ? 0 : 2,
   });
 }
 
-function formatDecimal(value: number) {
+function fmtNumber(value: number, digits = 0) {
   return value.toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   });
 }
 
-function formatNumber(value: number) {
-  return value.toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+function fmtCompactBRL(value: number) {
+  if (value >= 1_000_000) return `R$ ${(value / 1_000_000).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} mi`;
+  if (value >= 1_000) return `R$ ${(value / 1_000).toLocaleString("pt-BR", { maximumFractionDigits: 0 })} mil`;
+  return fmtBRL(value);
+}
+
+function safeDiv(a: number, b: number) {
+  return b ? a / b : 0;
+}
+
+function uniqueSorted(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
+function sortMonth(a: string, b: string) {
+  return a.localeCompare(b);
+}
+
+function metricLabel(metric: MetricKey) {
+  if (metric === "reais") return "Total combustível";
+  if (metric === "litros") return "Litros";
+  return "KM validado";
+}
+
+function metricValue(row: SummaryRow, metric: MetricKey) {
+  if (metric === "reais") return row.total;
+  if (metric === "litros") return row.litros;
+  return row.km;
+}
+
+function metricFormatter(metric: MetricKey, value: number) {
+  if (metric === "reais") return fmtCompactBRL(value);
+  if (metric === "litros") return `${fmtNumber(value, 0)} L`;
+  return `${fmtNumber(value, 0)} km`;
+}
+
+function aggregateFuelRows(rows: FuelRow[], months: string[]) {
+  const byMonth = new Map<string, SummaryRow>();
+
+  months.forEach((mes) => {
+    byMonth.set(mes, {
+      mes,
+      total: 0,
+      litros: 0,
+      preco: 0,
+      km: 0,
+      kml: 0,
+      rskm: 0,
+      registros: 0,
+      ok: 0,
+    });
   });
-}
 
-function formatCompactCurrency(value: number) {
-  return `R$ ${(value / 1000).toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}k`;
-}
+  for (const row of rows) {
+    if (!byMonth.has(row.mes)) {
+      byMonth.set(row.mes, {
+        mes: row.mes,
+        total: 0,
+        litros: 0,
+        preco: 0,
+        km: 0,
+        kml: 0,
+        rskm: 0,
+        registros: 0,
+        ok: 0,
+      });
+    }
 
-function formatCompactNumber(value: number) {
-  return `${(value / 1000).toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}k`;
-}
+    const item = byMonth.get(row.mes)!;
+    item.total += row.reais;
+    item.litros += row.litros;
+    item.registros += 1;
 
-function metricLabel(metric: EfficiencyMetric) {
-  const labels: Record<EfficiencyMetric, string> = {
-    kmPorLitro: "KM/L",
-    realPorLitro: "R$/L",
-    realPorKm: "R$/KM",
-  };
+    const isOk = normalizeText(row.obs) === "ok" && row.km > 0 && row.litros > 0;
+    if (isOk) {
+      item.km += row.km;
+      item.ok += 1;
+    }
+  }
 
-  return labels[metric];
-}
-
-function totalLabel(metric: TotalMetric) {
-  const labels: Record<TotalMetric, string> = {
-    reais: "Reais",
-    litros: "Litros",
-    km: "KM",
-  };
-
-  return labels[metric];
-}
-
-function trailerMetricLabel(metric: TrailerEfficiencyMetric) {
-  const labels: Record<TrailerEfficiencyMetric, string> = {
-    litrosPorHora: "L/h",
-    realPorHora: "R$/h",
-  };
-
-  return labels[metric];
-}
-
-function trailerTotalLabel(metric: TrailerTotalMetric) {
-  const labels: Record<TrailerTotalMetric, string> = {
-    reais: "Reais",
-    litros: "Litros",
-    horas: "Horas",
-  };
-
-  return labels[metric];
+  return Array.from(byMonth.values())
+    .map((item) => ({
+      ...item,
+      preco: safeDiv(item.total, item.litros),
+      kml: safeDiv(item.km, item.litros),
+      rskm: safeDiv(item.total, item.km),
+    }))
+    .sort((a, b) => sortMonth(a.mes, b.mes));
 }
 
 export default function Slide3() {
-  const [rows, setRows] = useState<FuelRow[]>([]);
-  const [trailerRows, setTrailerRows] = useState<TrailerFuelRow[]>([]);
-
-  const [filter, setFilter] = useState<FilterType>("total");
-  const [selectedOwner, setSelectedOwner] = useState("total");
-
-  const [selectedMotorizedPlate, setSelectedMotorizedPlate] = useState("total");
-  const [selectedTrailerPlate, setSelectedTrailerPlate] = useState("total");
-
-  const [isMotorizedPlateModalOpen, setIsMotorizedPlateModalOpen] = useState(false);
-  const [isTrailerPlateModalOpen, setIsTrailerPlateModalOpen] = useState(false);
-
-  const [draftPlateSearch, setDraftPlateSearch] = useState("");
-  const [draftSelectedOwner, setDraftSelectedOwner] = useState("total");
-  const [draftSelectedMotorizedPlate, setDraftSelectedMotorizedPlate] = useState("total");
-  const [draftSelectedTrailerPlate, setDraftSelectedTrailerPlate] = useState("total");
-
-  const [efficiencyMetric, setEfficiencyMetric] =
-    useState<EfficiencyMetric>("kmPorLitro");
-
-  const [totalMetric, setTotalMetric] = useState<TotalMetric>("reais");
-
-  const [trailerEfficiencyMetric, setTrailerEfficiencyMetric] =
-    useState<TrailerEfficiencyMetric>("realPorHora");
-
-  const [trailerTotalMetric, setTrailerTotalMetric] =
-    useState<TrailerTotalMetric>("reais");
-
-  const [trailerQualityFilter, setTrailerQualityFilter] = useState("total");
+  const [fuelRows, setFuelRows] = useState<FuelRow[]>([]);
+  const [status, setStatus] = useState("Carregando aba Abastecimento...");
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodKey>("Todos");
+  const [selectedOrigin, setSelectedOrigin] = useState("Todos");
+  const [selectedType, setSelectedType] = useState("Todos");
+  const [selectedStation, setSelectedStation] = useState("Todos");
+  const [mainMetric, setMainMetric] = useState<MetricKey>("reais");
+  const [stationMetric, setStationMetric] = useState<StationMetric>("reais");
 
   useEffect(() => {
-    async function loadData() {
-      const response = await fetch(FILE_PATH);
-      const arrayBuffer = await response.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+    async function loadWorkbook() {
+      try {
+        const response = await fetch(FILE_PATH);
+        if (!response.ok) {
+          throw new Error(`Arquivo não encontrado: ${FILE_PATH}`);
+        }
 
-      const sheetName =
-        workbook.SheetNames.find((name) =>
-          normalizeText(name).includes("combustivel")
-        ) ?? workbook.SheetNames[0];
+        const arrayBuffer = await response.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: "array" });
 
-      const sheet = workbook.Sheets[sheetName];
-
-      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-        defval: "",
-      });
-
-      const parsedRows = rawRows
-        .map((row) => {
-          const placa = String(getValue(row, ["placa", "veiculo", "veículo"])).trim();
-
-          const mes = getMonthName(
-            getValue(row, ["mês", "mes", "competência", "competencia"])
+        const sheetToJson = (aliases: string[]) => {
+          const sheetName = workbook.SheetNames.find((sheet) =>
+            aliases.some((alias) => normalizeText(sheet) === normalizeText(alias)),
           );
 
-          const propriedade = String(
-            getValue(row, [
-              "próprio/terceiro",
-              "proprio/terceiro",
-              "propriedade",
-              "dono",
-              "frota",
-            ])
-          ).trim();
+          if (!sheetName) return [] as Record<string, unknown>[];
 
-          const reais = toNumber(
-            getValue(row, [
-              "combustível r$",
-              "combustivel r$",
-              "r$ combustível",
-              "r$ combustivel",
-              "valor combustível",
-              "valor combustivel",
-              "total combustível",
-              "total combustivel",
-            ])
+          return XLSX.utils.sheet_to_json<Record<string, unknown>>(
+            workbook.Sheets[sheetName],
+            { defval: "", raw: true },
           );
+        };
 
-          const litros = toNumber(getValue(row, ["litros", "litragem", "volume"]));
+        // A nova base consolidada possui todos os dados necessários nesta aba.
+        // Mantemos aliases para funcionar também caso ela seja renomeada para Combustivel.
+        const abastecimento = sheetToJson(["Abastecimento", "Combustivel", "Combustível"]);
 
-          const km = toNumber(
-            getValue(row, [
-              "km oficial placa/mês",
-              "km oficial placa/mes",
-              "km oficial",
-            ])
-          );
+        if (!abastecimento.length) {
+          throw new Error("Aba Abastecimento/Combustivel não encontrada ou vazia");
+        }
 
-          return { placa, mes, propriedade, reais, litros, km };
-        })
-        .filter((row) => row.placa && monthOrder.includes(row.mes));
+        const parsedFuel = abastecimento
+          .map((row) => {
+            const km = toNumber(getValue(row, ["Km Rodado", "KM Rodado", "KM"]));
+            const litros = toNumber(getValue(row, ["Litros", "Litragem", "Volume"]));
+            const reais = toNumber(getValue(row, ["Total", "Valor Total", "Total R$", "Valor R$"]));
+            const valorLitro = toNumber(getValue(row, ["Valor", "R$/L", "Preço", "Preco"]));
 
-      setRows(parsedRows);
-    }
+            return {
+              placa: String(getValue(row, ["Veículo", "Veiculo", "Placa"])).trim().toUpperCase(),
+              mes: toMonthKey(getValue(row, ["Data", "Mês", "Mes"])),
+              propriedade: String(getValue(row, ["Origem", "Próprio/Terceiro", "Proprio/Terceiro", "Propriedade"])).trim() || "Sem origem",
+              tipo: String(getValue(row, ["Tipo"])).trim() || "Sem tipo",
+              cavaloBau: String(getValue(row, ["Cavalo_Báu", "Cavalo_Bau", "Cavalo/Baú", "Cavalo/Bau"])).trim(),
+              posto: String(getValue(row, ["Posto", "Fornecedor", "Estabelecimento", "Local"])).trim() || "Posto não informado",
+              motorista: String(getValue(row, ["Motorista"])).trim() || "Motorista não informado",
+              combustivel: String(getValue(row, ["Combustível", "Combustivel", "Produto"])).trim() || "Combustível",
+              reais,
+              litros,
+              km,
+              kml: toNumber(getValue(row, ["Consumo (KM/Litro)", "KM/L", "Consumo"])),
+              rsl: valorLitro || safeDiv(reais, litros),
+              rskm: safeDiv(reais, km),
+              // Para esta aba, consideramos KM válido quando existe rodagem positiva e litros positivos.
+              obs: km > 0 && litros > 0 ? "OK" : "",
+              abastecimentos: 1,
+            };
+          })
+          .filter((row) => row.placa && row.mes && (row.reais > 0 || row.litros > 0));
 
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    async function loadTrailerData() {
-      const response = await fetch(TRAILER_FILE_PATH);
-      const arrayBuffer = await response.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, { type: "array" });
-
-      const sheetName =
-        workbook.SheetNames.find((name) =>
-          normalizeText(name).includes("periodos")
-        ) ??
-        workbook.SheetNames.find((name) =>
-          normalizeText(name).includes("consolidado")
-        ) ??
-        workbook.SheetNames[0];
-
-      const sheet = workbook.Sheets[sheetName];
-
-      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-        defval: "",
-      });
-
-      const parsedRows = rawRows
-        .map((row) => {
-          const placa = String(getValue(row, ["placa", "veiculo", "veículo"])).trim();
-
-          let mes = getMonthName(
-            getValue(row, ["mês", "mes", "competência", "competencia"])
-          );
-
-          if (!monthOrder.includes(mes)) {
-            mes = getMonthName(getValue(row, ["data fim", "data_fim", "data"]));
-          }
-
-          const propriedade = String(
-            getValue(row, [
-              "próprio/terceiro",
-              "proprio/terceiro",
-              "propriedade",
-              "dono",
-              "frota",
-            ])
-          ).trim();
-
-          const reais = toNumber(
-            getValue(row, [
-              "reais",
-              "valor",
-              "total",
-              "r$",
-              "valor total",
-              "combustível r$",
-              "combustivel r$",
-              "r$ combustível",
-              "r$ combustivel",
-            ])
-          );
-
-          const litros = toNumber(getValue(row, ["litros", "litragem", "volume"]));
-
-          const horas = toNumber(
-            getValue(row, [
-              "horas",
-              "horas ligadas",
-              "horas período",
-              "horas periodo",
-              "horímetro rodado",
-              "horimetro rodado",
-            ])
-          );
-
-          const litrosPorHora =
-            toNumber(getValue(row, ["l/h", "litros por hora", "litros/hora"])) ||
-            (horas > 0 ? litros / horas : 0);
-
-          const realPorHora =
-            toNumber(getValue(row, ["r$/h", "reais por hora", "valor por hora"])) ||
-            (horas > 0 ? reais / horas : 0);
-
-          const qualidade = String(
-            getValue(row, ["qualidade", "confiabilidade", "status"])
-          ).trim();
-
-          const filtro = String(getValue(row, ["filtro"])).trim();
-
-          return {
-            placa,
-            mes,
-            propriedade,
-            reais,
-            litros,
-            horas,
-            litrosPorHora,
-            realPorHora,
-            qualidade: qualidade || "Não informado",
-            filtro,
-          };
-        })
-        .filter((row) => {
-          return (
-            row.placa &&
-            monthOrder.includes(row.mes) &&
-            isFalseFilter(row.filtro)
-          );
-        });
-
-      setTrailerRows(parsedRows);
-    }
-
-    loadTrailerData();
-  }, []);
-
-  const motorizedPlateOptions = useMemo(() => {
-    const map = new Map<string, { placa: string; propriedade: string }>();
-
-    rows.forEach((row) => {
-      if (!map.has(row.placa)) {
-        map.set(row.placa, {
-          placa: row.placa,
-          propriedade: row.propriedade || "Não informado",
-        });
+        setFuelRows(parsedFuel);
+        setStatus(`Base carregada: ${parsedFuel.length.toLocaleString("pt-BR")} abastecimentos`);
+      } catch (error) {
+        console.warn(error);
+        setFuelRows([]);
+        setStatus("Erro ao carregar a aba Abastecimento da base consolidada");
       }
+    }
+
+    loadWorkbook();
+  }, []);
+
+  const months = useMemo(
+    () => uniqueSorted(fuelRows.map((row) => row.mes)).sort(sortMonth),
+    [fuelRows],
+  );
+
+  const originOptions = useMemo(
+    () => ["Todos", ...uniqueSorted(fuelRows.map((row) => row.propriedade || "Sem origem"))],
+    [fuelRows],
+  );
+
+  const typeOptions = useMemo(
+    () => ["Todos", ...uniqueSorted(fuelRows.map((row) => row.tipo || "Sem tipo"))],
+    [fuelRows],
+  );
+
+  // Base para montar as opções de posto sem o próprio filtro de posto.
+  const stationBaseRows = useMemo(() => {
+    return fuelRows.filter((row) => {
+      if (selectedPeriod !== "Todos" && row.mes !== selectedPeriod) return false;
+      if (selectedOrigin !== "Todos" && row.propriedade !== selectedOrigin) return false;
+      if (selectedType !== "Todos" && row.tipo !== selectedType) return false;
+      return true;
     });
+  }, [fuelRows, selectedOrigin, selectedPeriod, selectedType]);
 
-    return Array.from(map.values()).sort((a, b) =>
-      a.placa.localeCompare(b.placa)
-    );
-  }, [rows]);
+  const stationOptions = useMemo(
+    () => ["Todos", ...uniqueSorted(stationBaseRows.map((row) => row.posto))],
+    [stationBaseRows],
+  );
 
-  const trailerPlateOptions = useMemo(() => {
-    return Array.from(
-      new Set(trailerRows.map((row) => row.placa).filter(Boolean))
-    ).sort();
-  }, [trailerRows]);
-
-  const ownerOptions = useMemo(() => {
-    return Array.from(
-      new Set(
-        rows.map((row) => row.propriedade || "Não informado").filter(Boolean)
-      )
-    ).sort();
-  }, [rows]);
-
-  const modalMotorizedPlateOptions = useMemo(() => {
-    return motorizedPlateOptions.filter((item) => {
-      const matchOwner =
-        draftSelectedOwner === "total"
-          ? true
-          : item.propriedade === draftSelectedOwner;
-
-      const matchPlate = draftPlateSearch
-        ? normalizeText(item.placa).includes(normalizeText(draftPlateSearch))
-        : true;
-
-      return matchOwner && matchPlate;
+  const filteredFuelRows = useMemo(() => {
+    return stationBaseRows.filter((row) => {
+      if (selectedStation !== "Todos" && row.posto !== selectedStation) return false;
+      return true;
     });
-  }, [motorizedPlateOptions, draftSelectedOwner, draftPlateSearch]);
+  }, [selectedStation, stationBaseRows]);
 
-  const modalTrailerPlateOptions = useMemo(() => {
-    return trailerPlateOptions.filter((placa) => {
-      return draftPlateSearch
-        ? normalizeText(placa).includes(normalizeText(draftPlateSearch))
-        : true;
-    });
-  }, [trailerPlateOptions, draftPlateSearch]);
-
-  function openMotorizedPlateModal() {
-    setDraftSelectedOwner(selectedOwner);
-    setDraftSelectedMotorizedPlate(selectedMotorizedPlate);
-    setDraftPlateSearch("");
-    setIsMotorizedPlateModalOpen(true);
-  }
-
-  function openTrailerPlateModal() {
-    setDraftSelectedTrailerPlate(selectedTrailerPlate);
-    setDraftPlateSearch("");
-    setIsTrailerPlateModalOpen(true);
-  }
-
-  function applyMotorizedPlateSelection() {
-    setSelectedOwner(draftSelectedOwner);
-    setSelectedMotorizedPlate(draftSelectedMotorizedPlate);
-    setIsMotorizedPlateModalOpen(false);
-  }
-
-  function applyTrailerPlateSelection() {
-    setSelectedTrailerPlate(draftSelectedTrailerPlate);
-    setIsTrailerPlateModalOpen(false);
-  }
-
-  function clearMotorizedPlateSelection() {
-    setDraftSelectedOwner("total");
-    setDraftSelectedMotorizedPlate("total");
-    setSelectedOwner("total");
-    setSelectedMotorizedPlate("total");
-    setIsMotorizedPlateModalOpen(false);
-  }
-
-  function clearTrailerPlateSelection() {
-    setDraftSelectedTrailerPlate("total");
-    setSelectedTrailerPlate("total");
-    setIsTrailerPlateModalOpen(false);
-  }
-
-  const filteredRows = useMemo(() => {
-    return rows.filter((row) => {
-      const motorizedIsProprio = isProprio(row.propriedade);
-
-      const matchOwnership =
-        filter === "total"
-          ? true
-          : filter === "proprio"
-            ? motorizedIsProprio
-            : !motorizedIsProprio;
-
-      const matchOwner =
-        selectedOwner === "total" ? true : row.propriedade === selectedOwner;
-
-      const matchPlate =
-        selectedMotorizedPlate === "total"
-          ? true
-          : row.placa === selectedMotorizedPlate;
-
-      return matchOwnership && matchOwner && matchPlate;
-    });
-  }, [rows, filter, selectedOwner, selectedMotorizedPlate]);
-
-  const monthly = useMemo(() => {
-    return monthOrder.map((mes) => {
-      const monthRows = filteredRows.filter((row) => row.mes === mes);
-
-      const reais = monthRows.reduce((sum, row) => sum + row.reais, 0);
-      const litros = monthRows.reduce((sum, row) => sum + row.litros, 0);
-      const km = monthRows.reduce((sum, row) => sum + row.km, 0);
-
-      return {
-        mes,
-        reais,
-        litros,
-        km,
-        kmPorLitro: litros > 0 ? km / litros : 0,
-        realPorLitro: litros > 0 ? reais / litros : 0,
-        realPorKm: km > 0 ? reais / km : 0,
-      };
-    });
-  }, [filteredRows]);
+  const chartRows = useMemo(() => {
+    const chosenMonths = selectedPeriod === "Todos" ? months : [selectedPeriod];
+    return aggregateFuelRows(filteredFuelRows, chosenMonths)
+      .filter((row) => row.total > 0 || row.litros > 0);
+  }, [filteredFuelRows, months, selectedPeriod]);
 
   const totals = useMemo(() => {
-    const reais = filteredRows.reduce((sum, row) => sum + row.reais, 0);
-    const litros = filteredRows.reduce((sum, row) => sum + row.litros, 0);
-    const km = filteredRows.reduce((sum, row) => sum + row.km, 0);
+    const total = chartRows.reduce((acc, row) => acc + row.total, 0);
+    const litros = chartRows.reduce((acc, row) => acc + row.litros, 0);
+    const km = chartRows.reduce((acc, row) => acc + row.km, 0);
+    const registros = chartRows.reduce((acc, row) => acc + row.registros, 0);
+    const ok = chartRows.reduce((acc, row) => acc + row.ok, 0);
 
     return {
-      reais,
+      total,
       litros,
       km,
-      kmPorLitro: litros > 0 ? km / litros : 0,
-      realPorLitro: litros > 0 ? reais / litros : 0,
-      realPorKm: km > 0 ? reais / km : 0,
+      preco: safeDiv(total, litros),
+      kml: safeDiv(km, litros),
+      rskm: safeDiv(total, km),
+      registros,
+      ok,
+      okPct: safeDiv(ok, registros) * 100,
     };
-  }, [filteredRows]);
+  }, [chartRows]);
 
-  const filteredTrailerRows = useMemo(() => {
-    return trailerRows.filter((row) => {
-      const trailerIsProprio = isProprio(row.propriedade);
+  const stationRows = useMemo(() => {
+    const map = new Map<string, { posto: string; total: number; litros: number; preco: number }>();
 
-      const matchOwnership =
-        filter === "total"
-          ? true
-          : filter === "proprio"
-            ? trailerIsProprio
-            : !trailerIsProprio;
+    for (const row of filteredFuelRows) {
+      const item = map.get(row.posto) || { posto: row.posto, total: 0, litros: 0, preco: 0 };
+      item.total += row.reais;
+      item.litros += row.litros;
+      map.set(row.posto, item);
+    }
 
-      const matchTrailerPlate =
-        selectedTrailerPlate === "total"
-          ? true
-          : row.placa === selectedTrailerPlate;
+    return Array.from(map.values())
+      .map((item) => ({ ...item, preco: safeDiv(item.total, item.litros) }))
+      .filter((item) => (stationMetric === "reais" ? item.total > 0 : item.litros > 0))
+      .sort((a, b) => (stationMetric === "reais" ? b.total - a.total : b.litros - a.litros))
+      .slice(0, 8);
+  }, [filteredFuelRows, stationMetric]);
 
-      const matchQuality =
-        trailerQualityFilter === "total"
-          ? true
-          : normalizeText(row.qualidade).includes(
-              normalizeText(trailerQualityFilter)
-            );
+  const plateRows = useMemo(() => {
+    const map = new Map<string, { placa: string; total: number; litros: number; km: number; kml: number; rskm: number }>();
 
-      return matchOwnership && matchTrailerPlate && matchQuality;
-    });
-  }, [trailerRows, filter, selectedTrailerPlate, trailerQualityFilter]);
+    for (const row of filteredFuelRows) {
+      const item = map.get(row.placa) || { placa: row.placa, total: 0, litros: 0, km: 0, kml: 0, rskm: 0 };
+      item.total += row.reais;
+      item.litros += row.litros;
+      if (normalizeText(row.obs) === "ok") item.km += row.km;
+      map.set(row.placa, item);
+    }
 
-  const trailerMonthly = useMemo(() => {
-    return monthOrder.map((mes) => {
-      const monthRows = filteredTrailerRows.filter((row) => row.mes === mes);
+    return Array.from(map.values())
+      .map((item) => ({ ...item, kml: safeDiv(item.km, item.litros), rskm: safeDiv(item.total, item.km) }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 6);
+  }, [filteredFuelRows]);
 
-      const reais = monthRows.reduce((sum, row) => sum + row.reais, 0);
-      const litros = monthRows.reduce((sum, row) => sum + row.litros, 0);
-      const horas = monthRows.reduce((sum, row) => sum + row.horas, 0);
-
-      return {
-        mes,
-        reais,
-        litros,
-        horas,
-        litrosPorHora: horas > 0 ? litros / horas : 0,
-        realPorHora: horas > 0 ? reais / horas : 0,
-      };
-    });
-  }, [filteredTrailerRows]);
-
-  const trailerTotals = useMemo(() => {
-    const reais = filteredTrailerRows.reduce((sum, row) => sum + row.reais, 0);
-    const litros = filteredTrailerRows.reduce((sum, row) => sum + row.litros, 0);
-    const horas = filteredTrailerRows.reduce((sum, row) => sum + row.horas, 0);
-
-    return {
-      reais,
-      litros,
-      horas,
-      litrosPorHora: horas > 0 ? litros / horas : 0,
-      realPorHora: horas > 0 ? reais / horas : 0,
-      placas: new Set(filteredTrailerRows.map((row) => row.placa)).size,
-      periodos: filteredTrailerRows.length,
-    };
-  }, [filteredTrailerRows]);
-
-  const combinedMonthly = useMemo(() => {
-    return monthOrder.map((mes) => {
-      const motorizedMonth = monthly.find((item) => item.mes === mes);
-      const trailerMonth = trailerMonthly.find((item) => item.mes === mes);
-
-      const reais = (motorizedMonth?.reais ?? 0) + (trailerMonth?.reais ?? 0);
-      const litros = (motorizedMonth?.litros ?? 0) + (trailerMonth?.litros ?? 0);
-
-      return {
-        mes,
-        reais,
-        litros,
-        realPorLitro: litros > 0 ? reais / litros : 0,
-      };
-    });
-  }, [monthly, trailerMonthly]);
-
-  const combinedTotals = useMemo(() => {
-    const reais = combinedMonthly.reduce((sum, row) => sum + row.reais, 0);
-    const litros = combinedMonthly.reduce((sum, row) => sum + row.litros, 0);
-
-    return {
-      reais,
-      litros,
-      realPorLitro: litros > 0 ? reais / litros : 0,
-    };
-  }, [combinedMonthly]);
-
-  const trailerQualityOptions = useMemo(() => {
-    return Array.from(
-      new Set(
-        trailerRows.map((row) => row.qualidade || "Não informado").filter(Boolean)
-      )
-    ).sort();
-  }, [trailerRows]);
-
-  const efficiencyChart = {
-    grid: { left: 58, right: 22, top: 28, bottom: 34 },
+  const evolutionOption = useMemo(() => ({
+    color: ["#991b1b", "#f59e0b", "#0f172a"],
     tooltip: {
       trigger: "axis",
-      valueFormatter: (value: number) => formatDecimal(value),
+      formatter: (params: any) => {
+        const rows = Array.isArray(params) ? params : [params];
+        return rows
+          .map((item: any) => {
+            const value = Number(item.value || 0);
+            const formatted = item.seriesName === "KM/L validado" ? `${fmtNumber(value, 2)} km/L` : metricFormatter(mainMetric, value);
+            return `<strong>${item.marker}${item.seriesName}</strong>: ${formatted}`;
+          })
+          .join("<br/>");
+      },
     },
+    legend: { bottom: 0, textStyle: { color: "#64748b", fontSize: 11, fontWeight: 700 } },
+    grid: { left: 52, right: 46, top: 28, bottom: 58 },
     xAxis: {
       type: "category",
-      data: monthly.map((item) => item.mes),
-      axisTick: { show: false },
-    },
-    yAxis: {
-      type: "value",
-      splitLine: { lineStyle: { color: "#e5e7eb" } },
-    },
-    series: [
-      {
-        name: metricLabel(efficiencyMetric),
-        type: "line",
-        smooth: true,
-        symbolSize: 10,
-        data: monthly.map((item) => item[efficiencyMetric]),
-        lineStyle: { width: 4, color: "#991b1b" },
-        itemStyle: { color: "#dc2626" },
-        areaStyle: { color: "rgba(220, 38, 38, 0.10)" },
-      },
-    ],
-  };
-
-  const totalsChart = {
-    grid: { left: 72, right: 22, top: 28, bottom: 34 },
-    tooltip: {
-      trigger: "axis",
-      valueFormatter: (value: number) =>
-        totalMetric === "reais" ? formatCurrency(value) : formatNumber(value),
-    },
-    xAxis: {
-      type: "category",
-      data: monthly.map((item) => item.mes),
-      axisTick: { show: false },
-    },
-    yAxis: {
-      type: "value",
-      axisLabel: {
-        formatter: (value: number) =>
-          totalMetric === "reais"
-            ? formatCompactCurrency(value)
-            : formatCompactNumber(value),
-      },
-      splitLine: { lineStyle: { color: "#e5e7eb" } },
-    },
-    series: [
-      {
-        name: totalLabel(totalMetric),
-        type: "bar",
-        data: monthly.map((item) => item[totalMetric]),
-        barWidth: 40,
-        itemStyle: {
-          borderRadius: [12, 12, 0, 0],
-          color: "#b01625",
-        },
-      },
-    ],
-  };
-
-  const trailerEfficiencyChart = {
-    grid: { left: 64, right: 22, top: 28, bottom: 34 },
-    tooltip: {
-      trigger: "axis",
-      valueFormatter: (value: number) => formatDecimal(value),
-    },
-    xAxis: {
-      type: "category",
-      data: trailerMonthly.map((item) => item.mes),
-      axisTick: { show: false },
-    },
-    yAxis: {
-      type: "value",
-      splitLine: { lineStyle: { color: "#e5e7eb" } },
-    },
-    series: [
-      {
-        name: trailerMetricLabel(trailerEfficiencyMetric),
-        type: "line",
-        smooth: true,
-        symbolSize: 10,
-        data: trailerMonthly.map((item) => item[trailerEfficiencyMetric]),
-        lineStyle: { width: 4, color: "#7f1d1d" },
-        itemStyle: { color: "#b91c1c" },
-        areaStyle: { color: "rgba(185, 28, 28, 0.10)" },
-      },
-    ],
-  };
-
-  const trailerTotalsChart = {
-    grid: { left: 78, right: 22, top: 28, bottom: 34 },
-    tooltip: {
-      trigger: "axis",
-      valueFormatter: (value: number) =>
-        trailerTotalMetric === "reais"
-          ? formatCurrency(value)
-          : formatNumber(value),
-    },
-    xAxis: {
-      type: "category",
-      data: trailerMonthly.map((item) => item.mes),
-      axisTick: { show: false },
-    },
-    yAxis: {
-      type: "value",
-      axisLabel: {
-        formatter: (value: number) =>
-          trailerTotalMetric === "reais"
-            ? formatCompactCurrency(value)
-            : formatCompactNumber(value),
-      },
-      splitLine: { lineStyle: { color: "#e5e7eb" } },
-    },
-    series: [
-      {
-        name: trailerTotalLabel(trailerTotalMetric),
-        type: "bar",
-        data: trailerMonthly.map((item) => item[trailerTotalMetric]),
-        barWidth: 40,
-        itemStyle: {
-          borderRadius: [12, 12, 0, 0],
-          color: "#991b1b",
-        },
-      },
-    ],
-  };
-
-  const combinedTotalsChart = {
-    grid: { left: 78, right: 78, top: 40, bottom: 34 },
-    tooltip: {
-      trigger: "axis",
-      axisPointer: { type: "shadow" },
-      valueFormatter: (value: number) => formatDecimal(value),
-    },
-    legend: {
-      top: 0,
-      right: 0,
-    },
-    xAxis: {
-      type: "category",
-      data: combinedMonthly.map((item) => item.mes),
-      axisTick: { show: false },
+      data: chartRows.map((row) => monthLabel(row.mes)),
+      axisLine: { lineStyle: { color: "#cbd5e1" } },
+      axisLabel: { color: "#334155", fontWeight: 800 },
     },
     yAxis: [
       {
         type: "value",
-        name: "Reais",
-        axisLabel: {
-          formatter: (value: number) => formatCompactCurrency(value),
-        },
-        splitLine: { lineStyle: { color: "#e5e7eb" } },
+        axisLabel: { color: "#64748b", formatter: (value: number) => metricFormatter(mainMetric, Number(value)).replace("R$ ", "R$") },
+        splitLine: { lineStyle: { color: "#e2e8f0" } },
       },
       {
         type: "value",
-        name: "Litros",
-        axisLabel: {
-          formatter: (value: number) => formatCompactNumber(value),
-        },
+        axisLabel: { color: "#64748b", formatter: (value: number) => `${Number(value).toFixed(1)}` },
         splitLine: { show: false },
       },
     ],
     series: [
       {
-        name: "Reais",
+        name: metricLabel(mainMetric),
         type: "bar",
-        data: combinedMonthly.map((item) => item.reais),
-        barWidth: 34,
-        itemStyle: {
-          borderRadius: [10, 10, 0, 0],
-          color: "#b01625",
-        },
+        data: chartRows.map((row) => metricValue(row, mainMetric)),
+        barMaxWidth: 32,
+        itemStyle: { borderRadius: [8, 8, 0, 0] },
       },
       {
-        name: "Litros",
+        name: "KM/L validado",
         type: "line",
         yAxisIndex: 1,
+        data: chartRows.map((row) => Number(row.kml.toFixed(3))),
         smooth: true,
-        symbolSize: 9,
-        data: combinedMonthly.map((item) => item.litros),
-        lineStyle: { width: 4, color: "#0f172a" },
-        itemStyle: { color: "#0f172a" },
+        symbolSize: 7,
+        lineStyle: { width: 3 },
       },
     ],
-  };
+  }), [chartRows, mainMetric]);
 
-  const combinedRealPerLiterChart = {
-    grid: { left: 58, right: 28, top: 30, bottom: 34 },
+  const stationOption = useMemo(() => ({
+    color: ["#dc2626", "#0f172a"],
     tooltip: {
       trigger: "axis",
-      valueFormatter: (value: number) => `R$ ${formatDecimal(value)}`,
+      formatter: (params: any) => {
+        const rows = Array.isArray(params) ? params : [params];
+        return rows
+          .map((item: any) => {
+            const value = Number(item.value || 0);
+            const formatted = item.seriesName === "Preço médio R$/L" ? `R$ ${fmtNumber(value, 2)}` : stationMetric === "reais" ? fmtBRL(value) : `${fmtNumber(value, 0)} L`;
+            return `<strong>${item.marker}${item.seriesName}</strong>: ${formatted}`;
+          })
+          .join("<br/>");
+      },
     },
+    legend: { bottom: 0, textStyle: { color: "#64748b", fontSize: 11, fontWeight: 700 } },
+    grid: { left: 64, right: 52, top: 24, bottom: 82 },
     xAxis: {
       type: "category",
-      data: combinedMonthly.map((item) => item.mes),
-      axisTick: { show: false },
+      data: stationRows.map((row) => row.posto),
+      axisLabel: { color: "#334155", fontWeight: 700, rotate: 35, width: 96, overflow: "truncate" },
+      axisLine: { lineStyle: { color: "#cbd5e1" } },
     },
-    yAxis: {
-      type: "value",
-      name: "R$/L",
-      axisLabel: {
-        formatter: (value: number) => `R$ ${formatDecimal(value)}`,
+    yAxis: [
+      {
+        type: "value",
+        axisLabel: { color: "#64748b", formatter: (value: number) => stationMetric === "reais" ? fmtCompactBRL(Number(value)).replace("R$ ", "R$") : `${fmtNumber(Number(value), 0)} L` },
+        splitLine: { lineStyle: { color: "#e2e8f0" } },
       },
-      splitLine: { lineStyle: { color: "#e5e7eb" } },
-    },
+      { type: "value", axisLabel: { color: "#64748b", formatter: (value: number) => `R$ ${Number(value).toFixed(1)}` }, splitLine: { show: false } },
+    ],
     series: [
       {
-        name: "R$/L geral",
+        name: stationMetric === "reais" ? "Total (R$)" : "Litros",
+        type: "bar",
+        data: stationRows.map((row) => stationMetric === "reais" ? row.total : row.litros),
+        barMaxWidth: 26,
+        itemStyle: { borderRadius: [8, 8, 0, 0] },
+      },
+      {
+        name: "Preço médio R$/L",
         type: "line",
+        yAxisIndex: 1,
+        data: stationRows.map((row) => Number(row.preco.toFixed(2))),
         smooth: true,
-        symbolSize: 10,
-        data: combinedMonthly.map((item) => item.realPorLitro),
-        lineStyle: { width: 4, color: "#7f1d1d" },
-        itemStyle: { color: "#b01625" },
-        areaStyle: { color: "rgba(176, 22, 37, 0.10)" },
+        symbolSize: 7,
+        lineStyle: { width: 3 },
       },
     ],
-  };
+  }), [stationMetric, stationRows]);
 
   return (
-    <section className="slide slide3">
-      <header className="slide3-header">
-        <div>
-          <span className="slide3-tag">Combustível</span>
+    <section className="slide tm-slide">
+      <DeckStyles />
+      <img className="tm-logo-mini" src="/assets/logotransmassa.png" alt="Transmassa" />
 
-          <h1 className="slide3-title">Evolução mensal do combustível</h1>
+      <span className="tm-eyebrow">02 • Combustível</span>
+      <h1 className="tm-title">Combustível: consumo, postos e eficiência em leitura dinâmica</h1>
+      <p className="tm-subtitle">
+        Todos os KPIs e gráficos são calculados diretamente da aba Abastecimento da base consolidada.
+        Os filtros alteram evolução mensal, postos, placas e indicadores de eficiência.
+      </p>
 
-          <p className="slide3-subtitle">
-            Acompanhamento de KM oficial, litros, valor total e eficiência da
-            frota no período de Janeiro a Abril/2026.
-          </p>
-        </div>
+      <div
+        className="tm-card"
+        style={{
+          padding: 14,
+          marginBottom: 14,
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr 1fr auto auto",
+          gap: 10,
+          alignItems: "end",
+        }}
+      >
+        <label style={{ display: "grid", gap: 6, fontSize: 11, fontWeight: 900, color: "#64748b" }}>
+          Período
+          <select value={selectedPeriod} onChange={(e) => setSelectedPeriod(e.target.value)} style={{ borderRadius: 999, border: "1px solid #cbd5e1", padding: "9px 12px", fontWeight: 800 }}>
+            <option value="Todos">Todos</option>
+            {months.map((mes) => <option key={mes} value={mes}>{monthLabel(mes)}</option>)}
+          </select>
+        </label>
 
-        <div className="slide3-controls">
-          <div className="slide3-plate-selector-grid">
-            <button
-              type="button"
-              className="slide3-open-modal-button"
-              onClick={openMotorizedPlateModal}
-            >
-              <span>Placa Motorizado</span>
+        <label style={{ display: "grid", gap: 6, fontSize: 11, fontWeight: 900, color: "#64748b" }}>
+          Origem
+          <select value={selectedOrigin} onChange={(e) => setSelectedOrigin(e.target.value)} style={{ borderRadius: 999, border: "1px solid #cbd5e1", padding: "9px 12px", fontWeight: 800 }}>
+            {originOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </label>
 
-              <strong>
-                {selectedMotorizedPlate === "total"
-                  ? "Motorizado selecionado"
-                  : selectedMotorizedPlate}
-              </strong>
-            </button>
+        <label style={{ display: "grid", gap: 6, fontSize: 11, fontWeight: 900, color: "#64748b" }}>
+          Tipo
+          <select value={selectedType} onChange={(e) => setSelectedType(e.target.value)} style={{ borderRadius: 999, border: "1px solid #cbd5e1", padding: "9px 12px", fontWeight: 800 }}>
+            {typeOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </label>
 
-            <button
-              type="button"
-              className="slide3-open-modal-button"
-              onClick={openTrailerPlateModal}
-            >
-              <span>Placa Carreta</span>
+        <label style={{ display: "grid", gap: 6, fontSize: 11, fontWeight: 900, color: "#64748b" }}>
+          Posto
+          <select value={selectedStation} onChange={(e) => setSelectedStation(e.target.value)} style={{ borderRadius: 999, border: "1px solid #cbd5e1", padding: "9px 12px", fontWeight: 800 }}>
+            {stationOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </label>
 
-              <strong>
-                {selectedTrailerPlate === "total"
-                  ? "Carreta selecionada"
-                  : selectedTrailerPlate}
-              </strong>
-            </button>
-          </div>
+        <button
+          type="button"
+          onClick={() => setMainMetric((prev) => prev === "reais" ? "litros" : prev === "litros" ? "km" : "reais")}
+          style={{ borderRadius: 999, border: "1px solid #991b1b", background: "#991b1b", color: "#fff", padding: "10px 14px", fontWeight: 900, cursor: "pointer" }}
+        >
+          Métrica: {mainMetric === "reais" ? "R$" : mainMetric === "litros" ? "Litros" : "KM"}
+        </button>
 
-          <div className="slide3-filter">
-            <button
-              className={filter === "total" ? "active" : ""}
-              onClick={() => setFilter("total")}
-            >
-              Total
-            </button>
-
-            <button
-              className={filter === "proprio" ? "active" : ""}
-              onClick={() => setFilter("proprio")}
-            >
-              Próprio
-            </button>
-
-            <button
-              className={filter === "terceiro" ? "active" : ""}
-              onClick={() => setFilter("terceiro")}
-            >
-              Terceiro
-            </button>
-          </div>
-        </div>
-      </header>
-
-
-
-      <section className="slide3-total-section">
-        <div className="slide3-total-header">
-          <div>
-            <span className="slide3-tag">Totais</span>
-
-            <h2 className="slide3-total-title">Total geral de combustível</h2>
-
-            <p className="slide3-total-subtitle">
-              Soma mensal dos motorizados e das carretas para visão consolidada
-              do gasto total.
-            </p>
-          </div>
-
-          <div className="slide3-total-kpis">
-            <div className="slide3-kpi">
-              <span>Total em reais</span>
-              <strong>{formatCurrency(combinedTotals.reais)}</strong>
-            </div>
-
-            <div className="slide3-kpi">
-              <span>Total em litros</span>
-              <strong>{formatNumber(combinedTotals.litros)}</strong>
-            </div>
-
-            <div className="slide3-kpi highlight">
-              <span>R$/L geral</span>
-              <strong>{formatDecimal(combinedTotals.realPorLitro)}</strong>
-            </div>
-          </div>
-        </div>
-
-        <div className="slide3-dashboard">
-          <div className="slide3-chart-card">
-            <div className="slide3-chart-header">
-              <div>
-                <strong>Evolução mensal consolidada</strong>
-                <span>Total do mês: Reais + Litros</span>
-              </div>
-            </div>
-
-            <ReactECharts
-              option={combinedTotalsChart}
-              style={{ height: 300, width: "100%" }}
-            />
-          </div>
-
-          <div className="slide3-chart-card">
-            <div className="slide3-chart-header">
-              <div>
-                <strong>Evolução do preço pago</strong>
-                <span>Indicador consolidado: R$/L</span>
-              </div>
-            </div>
-
-            <ReactECharts
-              option={combinedRealPerLiterChart}
-              style={{ height: 300, width: "100%" }}
-            />
-          </div>
-        </div>
-      </section>
-
-      <h2 className="slide3-section-title">Motorizados</h2>
-      <div className="slide3-kpis">
-        <div className="slide3-kpi">
-          <span>Reais motorizados 2026</span>
-          <strong>{formatCurrency(totals.reais)}</strong>
-        </div>
-
-        <div className="slide3-kpi">
-          <span>Litros motorizados 2026</span>
-          <strong>{formatNumber(totals.litros)}</strong>
-        </div>
-
-        <div className="slide3-kpi">
-          <span>KM motorizados 2026</span>
-          <strong>{formatNumber(totals.km)}</strong>
-        </div>
-
-        <div className="slide3-kpi highlight">
-          <span>R$/KM médio 2026</span>
-          <strong>{formatDecimal(totals.realPorKm)}</strong>
-        </div>
+        <button
+          type="button"
+          onClick={() => setStationMetric((prev) => prev === "reais" ? "litros" : "reais")}
+          style={{ borderRadius: 999, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", padding: "10px 14px", fontWeight: 900, cursor: "pointer" }}
+        >
+          Postos: {stationMetric === "reais" ? "R$" : "Litros"}
+        </button>
       </div>
-      <div className="slide3-dashboard">
-        <div className="slide3-chart-card">
-          <div className="slide3-chart-header">
-            <div>
-              <strong>Indicador de eficiência</strong>
-              <span>{metricLabel(efficiencyMetric)}</span>
-            </div>
 
-            <select
-              value={efficiencyMetric}
-              onChange={(event) =>
-                setEfficiencyMetric(event.target.value as EfficiencyMetric)
-              }
-            >
-              <option value="kmPorLitro">KM/L</option>
-              <option value="realPorLitro">R$/L</option>
-              <option value="realPorKm">R$/KM</option>
-            </select>
+      <div className="tm-kpi-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)", marginBottom: 14 }}>
+        <div className="tm-kpi"><span>Total combustível</span><strong>{fmtCompactBRL(totals.total)}</strong><small>{fmtNumber(totals.litros, 0)} litros</small></div>
+        <div className="tm-kpi"><span>Preço médio</span><strong>R$ {fmtNumber(totals.preco, 2)}</strong><small>por litro abastecido</small></div>
+        <div className="tm-kpi"><span>KM validado</span><strong>{fmtNumber(totals.km, 0)}</strong><small>{fmtNumber(totals.kml, 2)} km/L</small></div>
+        <div className="tm-kpi"><span>Custo por KM</span><strong>R$ {fmtNumber(totals.rskm, 2)}</strong><small>KM Rodado maior que zero</small></div>
+        <div className="tm-kpi"><span>KM com rodagem</span><strong>{fmtNumber(totals.okPct, 1)}%</strong><small>{fmtNumber(totals.ok, 0)} de {fmtNumber(totals.registros, 0)} registros com KM</small></div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.15fr 1fr", gap: 14, flex: 1, minHeight: 0 }}>
+        <div className="tm-chart-card" style={{ padding: 16, minHeight: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <TrendingUp size={22} color="#991b1b" />
+            <h2 className="tm-mini-title" style={{ margin: 0 }}>Evolução mensal</h2>
           </div>
-
-          <ReactECharts
-            option={efficiencyChart}
-            style={{ height: 280, width: "100%" }}
-          />
+          <p style={{ margin: "0 0 6px 0" }}>
+            Alterne entre R$, litros e KM para enxergar se a alta vem de preço, volume ou rodagem.
+          </p>
+          <ReactECharts option={evolutionOption} style={{ height: 274, width: "100%" }} notMerge />
         </div>
 
-        <div className="slide3-chart-card">
-          <div className="slide3-chart-header">
-            <div>
-              <strong>Totais mês a mês</strong>
-              <span>{totalLabel(totalMetric)}</span>
-            </div>
-
-            <select
-              value={totalMetric}
-              onChange={(event) =>
-                setTotalMetric(event.target.value as TotalMetric)
-              }
-            >
-              <option value="reais">Reais</option>
-              <option value="litros">Litros</option>
-              <option value="km">KM</option>
-            </select>
+        <div className="tm-chart-card" style={{ padding: 16, minHeight: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <MapPin size={22} color="#991b1b" />
+            <h2 className="tm-mini-title" style={{ margin: 0 }}>Consumo por posto</h2>
           </div>
-
-          <ReactECharts
-            option={totalsChart}
-            style={{ height: 280, width: "100%" }}
-          />
+          <p style={{ margin: "0 0 6px 0" }}>
+            Ranking dinâmico por posto, com total abastecido e preço médio por litro.
+          </p>
+          {stationRows.length ? (
+            <ReactECharts option={stationOption} style={{ height: 274, width: "100%" }} notMerge />
+          ) : (
+            <div className="tm-note" style={{ height: 250, display: "grid", placeItems: "center", textAlign: "center" }}>
+              Sem dados de posto no filtro atual da aba Abastecimento.
+            </div>
+          )}
         </div>
       </div>
 
-      <section className="slide3-trailer-section">
-        <header className="slide3-trailer-header">
-          <div>
-            <span className="slide3-tag">Carretas / Termoking</span>
-
-            <h2 className="slide3-trailer-title">Carretas</h2>
+      <div style={{ display: "grid", gridTemplateColumns: "1.3fr 0.9fr", gap: 14, marginTop: 14 }}>
+        <div className="tm-card" style={{ padding: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <Fuel size={20} color="#991b1b" />
+            <h3 style={{ margin: 0, color: "#0f172a", fontSize: 16 }}>Placas com maior consumo no filtro</h3>
           </div>
-
-          <div className="slide3-trailer-controls">
-            <label>
-              Qualidade dos dados
-
-              <select
-                value={trailerQualityFilter}
-                onChange={(event) =>
-                  setTrailerQualityFilter(event.target.value)
-                }
-              >
-                <option value="total">Todas</option>
-
-                {trailerQualityOptions.map((quality) => (
-                  <option key={quality} value={quality}>
-                    {quality}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </header>
-
-        <div className="slide3-kpis">
-          <div className="slide3-kpi">
-            <span>Valor total Termoking</span>
-            <strong>{formatCurrency(trailerTotals.reais)}</strong>
-          </div>
-
-          <div className="slide3-kpi">
-            <span>Litros Termoking</span>
-            <strong>{formatNumber(trailerTotals.litros)}</strong>
-          </div>
-
-          <div className="slide3-kpi">
-            <span>Horas apuradas</span>
-            <strong>{formatNumber(trailerTotals.horas)}</strong>
-          </div>
-
-          <div className="slide3-kpi highlight slide3-kpi-double">
-          <div>
-            <span>R$/hora médio</span>
-            <strong>{formatDecimal(trailerTotals.realPorHora)}</strong>
-          </div>
-
-          <div>
-            <span>L/h médio</span>
-            <strong>{formatDecimal(trailerTotals.litrosPorHora)}</strong>
-          </div>
-        </div>
-        </div>
-
-        <div className="slide3-dashboard">
-          <div className="slide3-chart-card">
-            <div className="slide3-chart-header">
-              <div>
-                <strong>Eficiência por hora</strong>
-                <span>{trailerMetricLabel(trailerEfficiencyMetric)}</span>
+          <div style={{ display: "grid", gap: 8 }}>
+            {plateRows.length ? plateRows.map((row) => (
+              <div key={row.placa} style={{ display: "grid", gridTemplateColumns: "90px 1fr 88px", gap: 10, alignItems: "center" }}>
+                <strong style={{ color: "#0f172a" }}>{row.placa}</strong>
+                <div className="tm-bar-track" style={{ height: 12 }}>
+                  <div className="tm-bar-fill" style={{ width: `${Math.max(6, safeDiv(row.total, plateRows[0]?.total || 1) * 100)}%`, background: "#991b1b" }} />
+                </div>
+                <span style={{ color: "#475569", fontWeight: 900, textAlign: "right" }}>{fmtCompactBRL(row.total)}</span>
               </div>
-
-              <select
-                value={trailerEfficiencyMetric}
-                onChange={(event) =>
-                  setTrailerEfficiencyMetric(
-                    event.target.value as TrailerEfficiencyMetric
-                  )
-                }
-              >
-                <option value="realPorHora">R$/h</option>
-                <option value="litrosPorHora">L/h</option>
-              </select>
-            </div>
-
-            <ReactECharts
-              option={trailerEfficiencyChart}
-              style={{ height: 280, width: "100%" }}
-            />
-          </div>
-
-          <div className="slide3-chart-card">
-            <div className="slide3-chart-header">
-              <div>
-                <strong>Totais das carretas mês a mês</strong>
-                <span>{trailerTotalLabel(trailerTotalMetric)}</span>
-              </div>
-
-              <select
-                value={trailerTotalMetric}
-                onChange={(event) =>
-                  setTrailerTotalMetric(event.target.value as TrailerTotalMetric)
-                }
-              >
-                <option value="reais">Reais</option>
-                <option value="litros">Litros</option>
-                <option value="horas">Horas</option>
-              </select>
-            </div>
-
-            <ReactECharts
-              option={trailerTotalsChart}
-              style={{ height: 280, width: "100%" }}
-            />
+            )) : (
+              <p style={{ margin: 0, color: "#64748b" }}>Carregando dados por placa ou sem registros no filtro.</p>
+            )}
           </div>
         </div>
 
-        <div className="slide3-analysis-note">
-          <strong>Leitura executiva:</strong>
-
-          <p>
-            A análise das carretas deve ser lida de forma diferente dos
-            motorizados. Aqui, o objetivo não é medir KM/L, mas sim quanto o
-            Termoking consome por hora ligada. Por isso, os principais
-            indicadores são R$/h e L/h. Registros inconsistentes foram retirados
-            da análise para evitar distorções provocadas por horímetro incorreto,
-            períodos inconsistentes ou lançamentos que não representam operação
-            confiável.
+        <div className="tm-card" style={{ padding: 16, display: "grid", alignContent: "start", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Gauge size={20} color="#991b1b" />
+            <h3 style={{ margin: 0, color: "#0f172a", fontSize: 16 }}>Leitura executiva</h3>
+          </div>
+          <p style={{ margin: 0 }}>
+            O pico financeiro aparece quando há combinação de preço médio alto e volume. Por isso, o controle precisa separar três leituras: consumo total, posto de abastecimento e eficiência validada por KM.
           </p>
-        </div>
-      </section>
-
-      {isMotorizedPlateModalOpen && (
-        <div className="slide3-modal-backdrop">
-          <div className="slide3-modal">
-            <div className="slide3-modal-header">
-              <div>
-                <strong>Selecionar motorizado</strong>
-                <span>Procure por dono/propriedade e escolha uma placa.</span>
-              </div>
-
-              <button
-                type="button"
-                className="slide3-modal-close"
-                onClick={() => setIsMotorizedPlateModalOpen(false)}
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="slide3-modal-search">
-              <label>
-                Dono / Frota
-
-                <select
-                  value={draftSelectedOwner}
-                  onChange={(event) => {
-                    setDraftSelectedOwner(event.target.value);
-                    setDraftSelectedMotorizedPlate("total");
-                  }}
-                >
-                  <option value="total">Todas as frotas</option>
-
-                  {ownerOptions.map((owner) => (
-                    <option key={owner} value={owner}>
-                      {owner}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Placa Motorizado
-
-                <input
-                  value={draftPlateSearch}
-                  onChange={(event) => setDraftPlateSearch(event.target.value)}
-                  placeholder="Ex: ABC1D23..."
-                />
-              </label>
-            </div>
-
-            <div className="slide3-modal-list">
-              <button
-                type="button"
-                className={`slide3-modal-item ${
-                  draftSelectedMotorizedPlate === "total" ? "active" : ""
-                }`}
-                onClick={() => setDraftSelectedMotorizedPlate("total")}
-              >
-                <strong>Todos os motorizados</strong>
-                <span>Visualizar total filtrado</span>
-              </button>
-
-              {modalMotorizedPlateOptions.map((item) => (
-                <button
-                  key={item.placa}
-                  type="button"
-                  className={`slide3-modal-item ${
-                    draftSelectedMotorizedPlate === item.placa ? "active" : ""
-                  }`}
-                  onClick={() => setDraftSelectedMotorizedPlate(item.placa)}
-                >
-                  <strong>{item.placa}</strong>
-                  <span>{item.propriedade || "Não informado"}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="slide3-modal-footer">
-              <button
-                type="button"
-                className="slide3-modal-secondary"
-                onClick={clearMotorizedPlateSelection}
-              >
-                Limpar
-              </button>
-
-              <button
-                type="button"
-                className="slide3-modal-primary"
-                onClick={applyMotorizedPlateSelection}
-              >
-                Aplicar
-              </button>
-            </div>
+          <div className="tm-note">
+            <RefreshCcw size={16} style={{ verticalAlign: "middle", marginRight: 6 }} />
+            {status}
+          </div>
+          <div className="tm-note">
+            <Route size={16} style={{ verticalAlign: "middle", marginRight: 6 }} />
+            Gestão: usar total para orçamento e KM/L apenas com registros com KM.
           </div>
         </div>
-      )}
-
-      {isTrailerPlateModalOpen && (
-        <div className="slide3-modal-backdrop">
-          <div className="slide3-modal">
-            <div className="slide3-modal-header">
-              <div>
-                <strong>Selecionar carreta</strong>
-                <span>Procure e escolha uma placa de carreta.</span>
-              </div>
-
-              <button
-                type="button"
-                className="slide3-modal-close"
-                onClick={() => setIsTrailerPlateModalOpen(false)}
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="slide3-modal-search">
-              <label>
-                Placa Carreta
-
-                <input
-                  value={draftPlateSearch}
-                  onChange={(event) => setDraftPlateSearch(event.target.value)}
-                  placeholder="Ex: ABC1D23..."
-                />
-              </label>
-            </div>
-
-            <div className="slide3-modal-list">
-              <button
-                type="button"
-                className={`slide3-modal-item ${
-                  draftSelectedTrailerPlate === "total" ? "active" : ""
-                }`}
-                onClick={() => setDraftSelectedTrailerPlate("total")}
-              >
-                <strong>Todas as carretas</strong>
-                <span>Visualizar total filtrado</span>
-              </button>
-
-              {modalTrailerPlateOptions.map((placa) => (
-                <button
-                  key={placa}
-                  type="button"
-                  className={`slide3-modal-item ${
-                    draftSelectedTrailerPlate === placa ? "active" : ""
-                  }`}
-                  onClick={() => setDraftSelectedTrailerPlate(placa)}
-                >
-                  <strong>{placa}</strong>
-                  <span>Carreta / Termoking</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="slide3-modal-footer">
-              <button
-                type="button"
-                className="slide3-modal-secondary"
-                onClick={clearTrailerPlateSelection}
-              >
-                Limpar
-              </button>
-
-              <button
-                type="button"
-                className="slide3-modal-primary"
-                onClick={applyTrailerPlateSelection}
-              >
-                Aplicar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </section>
   );
 }
