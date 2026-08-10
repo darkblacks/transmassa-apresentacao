@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Filter, Gauge, MousePointer2, PackageSearch, Scale, Table2, Truck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Filter, Gauge, MousePointer2, Scale, Table2, Truck } from "lucide-react";
 import DeckStyles from "./DeckStyles";
 
 type PeriodKey = "consolidado" | "mai" | "jun" | "jul";
