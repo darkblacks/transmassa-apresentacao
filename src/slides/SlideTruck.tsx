@@ -723,11 +723,7 @@ export default function SlideTruck() {
   ), [selectedPeriod]);
 
   const maxDaily = Math.max(...selected.days, 1);
-  const topDays = selected.days
-    .map((count, index) => ({ day: index + 1, count }))
-    .filter((item) => item.count > 0)
-    .sort((a, b) => b.count - a.count || a.day - b.day)
-    .slice(0, 3);
+
 
   return (
     <section className="slide tm-slide">
